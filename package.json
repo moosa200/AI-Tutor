@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",
@@ -14,7 +14,6 @@
     "ingest:test": "npx tsx scripts/ingest.ts --test"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.984.0",
     "@clerk/nextjs": "^5.0.0",
     "@google/generative-ai": "^0.24.1",
     "@pinecone-database/pinecone": "^2.2.0",
@@ -36,7 +35,6 @@
     "dotenv": "^16.4.0",
     "lucide-react": "^0.344.0",
     "next": "14.1.0",
-    "pdf-parse": "^1.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^9.0.1",
