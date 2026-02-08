@@ -179,7 +179,7 @@ export async function ingestPaper(paperFiles: PaperFiles) {
           text: q.text,
           markScheme: q.markScheme,
           examinerRemarks: q.examinerRemarks,
-          marks: q.marks,
+          marks: q.marks ?? 0,
           difficulty: q.difficulty,
           imageUrl,
         },
