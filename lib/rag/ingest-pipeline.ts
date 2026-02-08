@@ -8,6 +8,7 @@ import {
 import { generateEmbeddings } from './gemini-embeddings'
 import { upsertVectors, QuestionMetadata } from './pinecone'
 import { PrismaClient } from '@prisma/client'
+import { cropAndSaveImage } from './pdf-image'
 
 const prisma = new PrismaClient()
 
@@ -149,6 +150,20 @@ export async function ingestPaper(paperFiles: PaperFiles) {
     console.log('\n💾 Step 5: Saving to database...')
     const savedQuestions = []
     for (const q of newQuestions) {
+      let imageUrl: string | null = null
+
+      if (q.hasImage && q.figureBoundingBox && q.pageNumber) {
+        console.log(`   🖼️  Cropping image for Q${q.questionNumber}...`)
+        imageUrl = await cropAndSaveImage(
+          questionPaperPath,
+          q.pageNumber,
+          q.figureBoundingBox,
+          year,
+          paper,
+          q.questionNumber
+        )
+      }
+
       const saved = await prisma.question.create({
         data: {
           year,
@@ -160,6 +175,7 @@ export async function ingestPaper(paperFiles: PaperFiles) {
           examinerRemarks: q.examinerRemarks,
           marks: q.marks,
           difficulty: q.difficulty,
+          imageUrl,
         },
       })
       savedQuestions.push(saved)
@@ -189,6 +205,7 @@ export async function ingestPaper(paperFiles: PaperFiles) {
         examinerRemarks: q.examinerRemarks || '',
         marks: q.marks,
         difficulty: q.difficulty,
+        imageUrl: q.imageUrl || undefined,
       } as QuestionMetadata,
     }))
 

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import fs from 'fs'
+import { PDFDocument } from 'pdf-lib'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -10,6 +11,8 @@ export interface ExtractedQuestion {
   topic: string
   difficulty: 'easy' | 'medium' | 'hard'
   hasImage: boolean
+  figureBoundingBox?: [number, number, number, number]
+  pageNumber: number
 }
 
 const EXTRACTION_PROMPT = `You are parsing Cambridge A Level Physics (9702) past papers. Extract ALL questions from this PDF.
@@ -21,7 +24,9 @@ For each question, return a JSON object in this EXACT format:
   "marks": 4,
   "topic": "Mechanics",
   "difficulty": "medium",
-  "hasImage": false
+  "hasImage": false,
+  "figureBoundingBox": null,
+  "pageNumber": 2
 }
 
 CRITICAL RULES FOR QUESTION NUMBERING:
@@ -41,6 +46,8 @@ FIGURES AND DIAGRAMS:
 - Format: Include the description in square brackets, e.g. "[Figure: A circuit shows a 1.5V battery connected in series with a 0.5 Ohm internal resistance and a 2.5 Ohm external resistor.]"
 - Include ALL numerical values, labels, and annotations visible in the figure.
 - hasImage: set to true if the question contains or references any figure/diagram.
+- figureBoundingBox: If hasImage is true, return the bounding box of the figure as [ymin, xmin, ymax, xmax] on a 0-1000 scale. If no figure, set to null.
+- pageNumber: The page number in the PDF where this question appears (integer, 1-based).
 
 MCQ QUESTIONS (Papers 11, 12, 13):
 - These are multiple choice questions. You MUST include ALL four options (A, B, C, D) in the question text.
@@ -64,38 +71,65 @@ export async function extractQuestionsFromPDF(
   try {
     console.log(`📄 Processing PDF: ${pdfPath}`)
 
-    // Read PDF file as base64
+    // Load PDF to split into chunks
     const pdfBuffer = fs.readFileSync(pdfPath)
-    const pdfBase64 = pdfBuffer.toString('base64')
+    const pdfDoc = await PDFDocument.load(pdfBuffer)
+    const totalPages = pdfDoc.getPageCount()
+    const CHUNK_SIZE = 10 // Process 10 pages at a time
+    
+    const allQuestions: ExtractedQuestion[] = []
 
-    // Use Gemini 2.0 Flash (free tier, multimodal)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+    console.log(`   Splitting ${totalPages} pages into chunks of ${CHUNK_SIZE}...`)
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: 'application/pdf',
-          data: pdfBase64,
+    for (let i = 0; i < totalPages; i += CHUNK_SIZE) {
+      const startPage = i
+      const endPage = Math.min(i + CHUNK_SIZE, totalPages)
+      console.log(`   Processing chunk: Pages ${startPage + 1}-${endPage}`)
+
+      // Create chunk PDF
+      const chunkPdf = await PDFDocument.create()
+      const pages = await chunkPdf.copyPages(pdfDoc, Array.from({ length: endPage - startPage }, (_, k) => startPage + k))
+      pages.forEach(p => chunkPdf.addPage(p))
+      const chunkBytes = await chunkPdf.save()
+      const chunkBase64 = Buffer.from(chunkBytes).toString('base64')
+
+      // Use Gemini 2.0 Flash
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 },
+      })
+
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: chunkBase64,
+          },
         },
-      },
-      { text: EXTRACTION_PROMPT },
-    ])
+        { text: EXTRACTION_PROMPT },
+      ])
 
-    const response = await result.response
-    const text = response.text()
+      const response = await result.response
+      const text = response.text()
 
-    console.log(`📝 Raw Gemini response length: ${text.length} chars`)
+      // Clean response
+      let cleanedText = text.trim()
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\n?/g, '')
+      }
 
-    // Clean response - remove markdown code blocks if present
-    let cleanedText = text.trim()
-    if (cleanedText.startsWith('```json')) {
-      cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
-    } else if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/```\n?/g, '')
+      try {
+        const chunkQuestions: ExtractedQuestion[] = JSON.parse(cleanedText)
+        allQuestions.push(...chunkQuestions)
+        console.log(`   ✓ Extracted ${chunkQuestions.length} questions from chunk`)
+      } catch (e) {
+        console.error(`   ❌ Error parsing JSON for chunk ${startPage + 1}-${endPage}:`, e)
+      }
     }
 
-    // Parse JSON
-    const questions: ExtractedQuestion[] = JSON.parse(cleanedText)
+    const questions = allQuestions
 
     console.log(`✅ Successfully extracted ${questions.length} questions`)
 

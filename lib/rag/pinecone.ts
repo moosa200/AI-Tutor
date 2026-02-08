@@ -26,6 +26,7 @@ export interface QuestionMetadata {
   examinerRemarks?: string
   marks: number
   difficulty: string
+  imageUrl?: string
 }
 
 // Upsert vectors to Pinecone

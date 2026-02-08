@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -35,6 +36,7 @@ model Question {
   text            String    // The question text
   markScheme      String    // Mark scheme for this question
   examinerRemarks String?   // Examiner tips/remarks if available
+  imageUrl        String?   // URL to the figure image if present
   marks           Int       // Total marks for this question
   difficulty      String    @default("medium") // easy, medium, hard
   createdAt       DateTime  @default(now())

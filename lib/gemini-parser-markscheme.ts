@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import fs from 'fs'
+import { PDFDocument } from 'pdf-lib'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -39,38 +40,65 @@ export async function extractMarkSchemeFromPDF(
   try {
     console.log(`📋 Processing mark scheme PDF: ${pdfPath}`)
 
-    // Read PDF file as base64
+    // Load PDF to split into chunks
     const pdfBuffer = fs.readFileSync(pdfPath)
-    const pdfBase64 = pdfBuffer.toString('base64')
+    const pdfDoc = await PDFDocument.load(pdfBuffer)
+    const totalPages = pdfDoc.getPageCount()
+    const CHUNK_SIZE = 10
+    
+    const allMarkSchemes: ExtractedMarkScheme[] = []
 
-    // Use Gemini 2.0 Flash
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+    console.log(`   Splitting ${totalPages} pages into chunks of ${CHUNK_SIZE}...`)
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: 'application/pdf',
-          data: pdfBase64,
+    for (let i = 0; i < totalPages; i += CHUNK_SIZE) {
+      const startPage = i
+      const endPage = Math.min(i + CHUNK_SIZE, totalPages)
+      console.log(`   Processing chunk: Pages ${startPage + 1}-${endPage}`)
+
+      // Create chunk PDF
+      const chunkPdf = await PDFDocument.create()
+      const pages = await chunkPdf.copyPages(pdfDoc, Array.from({ length: endPage - startPage }, (_, k) => startPage + k))
+      pages.forEach(p => chunkPdf.addPage(p))
+      const chunkBytes = await chunkPdf.save()
+      const chunkBase64 = Buffer.from(chunkBytes).toString('base64')
+
+      // Use Gemini 2.0 Flash
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 },
+      })
+
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: chunkBase64,
+          },
         },
-      },
-      { text: MARKSCHEME_PROMPT },
-    ])
+        { text: MARKSCHEME_PROMPT },
+      ])
 
-    const response = await result.response
-    const text = response.text()
+      const response = await result.response
+      const text = response.text()
 
-    console.log(`📝 Raw mark scheme response length: ${text.length} chars`)
+      // Clean response
+      let cleanedText = text.trim()
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\n?/g, '')
+      }
 
-    // Clean response
-    let cleanedText = text.trim()
-    if (cleanedText.startsWith('```json')) {
-      cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
-    } else if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/```\n?/g, '')
+      try {
+        const chunkSchemes: ExtractedMarkScheme[] = JSON.parse(cleanedText)
+        allMarkSchemes.push(...chunkSchemes)
+        console.log(`   ✓ Extracted ${chunkSchemes.length} mark schemes from chunk`)
+      } catch (e) {
+        console.error(`   ❌ Error parsing JSON for chunk ${startPage + 1}-${endPage}:`, e)
+      }
     }
 
-    // Parse JSON
-    const markSchemes: ExtractedMarkScheme[] = JSON.parse(cleanedText)
+    const markSchemes = allMarkSchemes
 
     console.log(`✅ Successfully extracted ${markSchemes.length} mark schemes`)
 

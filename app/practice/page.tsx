@@ -39,6 +39,7 @@ interface Question {
   examinerRemarks: string | null
   marks: number
   difficulty: string
+  imageUrl: string | null
 }
 
 interface TopicInfo {
@@ -295,6 +296,15 @@ export default function PracticePage() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {currentQuestion.imageUrl && (
+                    <div className="mb-6 flex justify-center overflow-hidden rounded-lg border bg-white p-2">
+                      <img
+                        src={currentQuestion.imageUrl}
+                        alt={`Figure for Q${currentQuestion.questionNumber}`}
+                        className="h-auto max-h-[500px] max-w-full object-contain"
+                      />
+                    </div>
+                  )}
                   <div className="prose prose-sm max-w-none whitespace-pre-wrap">
                     {currentQuestion.text}
                   </div>
