@@ -7,7 +7,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 export interface ExtractedQuestion {
   questionNumber: string
   text: string
-  marks: number
+  marks: number | null
   topic: string
   difficulty: 'easy' | 'medium' | 'hard'
   hasImage: boolean
@@ -86,6 +86,9 @@ export async function extractQuestionsFromPDF(
       const endPage = Math.min(i + CHUNK_SIZE, totalPages)
       console.log(`   Processing chunk: Pages ${startPage + 1}-${endPage}`)
 
+      // Add delay to avoid rate limits (Gemini free tier: 15 RPM)
+      if (i > 0) await new Promise((resolve) => setTimeout(resolve, 5000))
+
       // Create chunk PDF
       const chunkPdf = await PDFDocument.create()
       const pages = await chunkPdf.copyPages(pdfDoc, Array.from({ length: endPage - startPage }, (_, k) => startPage + k))
@@ -135,6 +138,11 @@ export async function extractQuestionsFromPDF(
 
     // Validate structure
     questions.forEach((q, idx) => {
+      // Handle null marks (common for parent questions or diagrams)
+      if (q.marks === null || q.marks === undefined) {
+        q.marks = 0
+      }
+
       if (
         !q.questionNumber ||
         !q.text ||

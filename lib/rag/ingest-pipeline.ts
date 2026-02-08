@@ -257,6 +257,9 @@ export async function ingestAllPapers(testMode = false) {
   for (const paper of papersToProcess) {
     try {
       await ingestPaper(paper)
+
+      console.log('⏳ Waiting 10 seconds to respect rate limits...')
+      await new Promise((resolve) => setTimeout(resolve, 10000))
     } catch (error) {
       console.error(`Failed to ingest ${paper.year} ${paper.paper}`)
       if (testMode) {

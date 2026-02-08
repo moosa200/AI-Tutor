@@ -55,6 +55,9 @@ export async function extractMarkSchemeFromPDF(
       const endPage = Math.min(i + CHUNK_SIZE, totalPages)
       console.log(`   Processing chunk: Pages ${startPage + 1}-${endPage}`)
 
+      // Add delay to avoid rate limits
+      if (i > 0) await new Promise((resolve) => setTimeout(resolve, 5000))
+
       // Create chunk PDF
       const chunkPdf = await PDFDocument.create()
       const pages = await chunkPdf.copyPages(pdfDoc, Array.from({ length: endPage - startPage }, (_, k) => startPage + k))
