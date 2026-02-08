@@ -2,8 +2,8 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: [
-      'canvas',
-      'pdfjs-dist',
+      'mupdf',
+      'sharp',
     ],
   },
 }
