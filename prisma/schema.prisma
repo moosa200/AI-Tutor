@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  clerkId   String    @unique
+  email     String    @unique
+  createdAt DateTime  @default(now())
+  attempts  Attempt[]
+}
+
+model Topic {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  level       String     // AS or A2
+  description String?
+  status      String     @default("not_started") // not_started, in_progress, completed
+  questions   Question[]
+}
+
+model Question {
+  id              String    @id @default(cuid())
+  year            Int
+  paper           String    // e.g., "Paper 2", "Paper 4"
+  questionNumber  String    // e.g., "1a", "2b(ii)"
+  topic           String    // Topic name for easy filtering
+  topicRelation   Topic?    @relation(fields: [topicId], references: [id])
+  topicId         String?
+  text            String    // The question text
+  markScheme      String    // Mark scheme for this question
+  examinerRemarks String?   // Examiner tips/remarks if available
+  marks           Int       // Total marks for this question
+  difficulty      String    @default("medium") // easy, medium, hard
+  createdAt       DateTime  @default(now())
+  attempts        Attempt[]
+
+  @@unique([year, paper, questionNumber])
+}
+
+model Attempt {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  studentAnswer String   // What the student submitted
+  score         Int      // Marks awarded
+  maxScore      Int      // Maximum marks possible
+  feedback      String   // AI-generated detailed feedback
+  mistakeTags   String[] // Array of mistake categories, e.g., ["unit_error", "sig_fig", "concept_error"]
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([questionId])
+}
+
+// Chat history for the tutor conversations
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String   // "user" or "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
