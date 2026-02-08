@@ -7,9 +7,19 @@ export async function GET(request: NextRequest) {
     const topic = searchParams.get('topic')
     const difficulty = searchParams.get('difficulty')
 
+    const paperType = searchParams.get('paperType')
+
     const where: any = {}
     if (topic && topic !== 'all') where.topic = topic
     if (difficulty && difficulty !== 'all') where.difficulty = difficulty
+    if (paperType && paperType !== 'all') {
+      // MCQ = Papers 11,12,13; Theory = all others (21,22,23,31,32,33,41,42,43,51,52,53)
+      if (paperType === 'mcq') {
+        where.paper = { in: ['Paper 11', 'Paper 12', 'Paper 13'] }
+      } else if (paperType === 'theory') {
+        where.paper = { notIn: ['Paper 11', 'Paper 12', 'Paper 13'] }
+      }
+    }
 
     const questions = await prisma.question.findMany({
       where,

@@ -60,6 +60,7 @@ export default function PracticePage() {
   const [topics, setTopics] = useState<TopicInfo[]>([])
   const [selectedTopic, setSelectedTopic] = useState('all')
   const [selectedDifficulty, setSelectedDifficulty] = useState('all')
+  const [selectedPaperType, setSelectedPaperType] = useState('all')
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answer, setAnswer] = useState('')
   const [isMarking, setIsMarking] = useState(false)
@@ -69,7 +70,7 @@ export default function PracticePage() {
   // Fetch questions when filters change
   useEffect(() => {
     fetchQuestions()
-  }, [selectedTopic, selectedDifficulty])
+  }, [selectedTopic, selectedDifficulty, selectedPaperType])
 
   const fetchQuestions = async () => {
     setIsLoading(true)
@@ -77,6 +78,7 @@ export default function PracticePage() {
       const params = new URLSearchParams()
       if (selectedTopic !== 'all') params.set('topic', selectedTopic)
       if (selectedDifficulty !== 'all') params.set('difficulty', selectedDifficulty)
+      if (selectedPaperType !== 'all') params.set('paperType', selectedPaperType)
 
       const response = await fetch(`/api/practice/questions?${params}`)
       const data = await response.json()
@@ -210,6 +212,19 @@ export default function PracticePage() {
                         {topic.name} ({topic.count})
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <label className="text-sm font-medium mb-1.5 block">Paper Type</label>
+                <Select value={selectedPaperType} onValueChange={setSelectedPaperType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="mcq">MCQ</SelectItem>
+                    <SelectItem value="theory">Theory / Structured</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
