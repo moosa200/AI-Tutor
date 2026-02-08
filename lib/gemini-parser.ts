@@ -46,7 +46,7 @@ FIGURES AND DIAGRAMS:
 - Format: Include the description in square brackets, e.g. "[Figure: A circuit shows a 1.5V battery connected in series with a 0.5 Ohm internal resistance and a 2.5 Ohm external resistor.]"
 - Include ALL numerical values, labels, and annotations visible in the figure.
 - hasImage: set to true if the question contains or references any figure/diagram.
-- figureBoundingBox: If hasImage is true, return the bounding box of the figure as [ymin, xmin, ymax, xmax] on a 0-1000 scale. If no figure, set to null.
+- figureBoundingBox: REQUIRED if hasImage is true. Return the bounding box as [ymin, xmin, ymax, xmax] on a 0-1000 scale.
 - pageNumber: The page number in the PDF where this question appears (integer, 1-based).
 
 MCQ QUESTIONS (Papers 11, 12, 13):

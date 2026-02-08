@@ -68,6 +68,7 @@ export default function PracticePage() {
   const [isMarking, setIsMarking] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [result, setResult] = useState<MarkingResult | null>(null)
+  const [imageLoadErrors, setImageLoadErrors] = useState<Record<string, boolean>>({})
 
   // Fetch questions when filters change
   useEffect(() => {
@@ -297,21 +298,22 @@ export default function PracticePage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {currentQuestion.imageUrl ? (
+                  {currentQuestion.imageUrl && !imageLoadErrors[currentQuestion.id] ? (
                     <div className="mb-6 flex justify-center overflow-hidden rounded-lg border bg-white p-2">
                       <img
                         src={currentQuestion.imageUrl}
                         alt={`Figure for Q${currentQuestion.questionNumber}`}
                         className="h-auto max-h-[500px] max-w-full object-contain"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none'
-                        }}
+                        onError={() => setImageLoadErrors((prev) => ({ ...prev, [currentQuestion.id]: true }))}
                       />
                     </div>
                   ) : currentQuestion.text.includes('[Figure:') && (
                     <div className="mb-6 flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-muted-foreground">
                       <ImageOff className="h-8 w-8 mb-2 opacity-50" />
                       <p className="text-sm font-medium">Diagram not available</p>
+                      {currentQuestion.imageUrl && (
+                        <p className="text-xs mt-1 text-destructive">Image failed to load</p>
+                      )}
                     </div>
                   )}
                   <div className="prose prose-sm max-w-none whitespace-pre-wrap">

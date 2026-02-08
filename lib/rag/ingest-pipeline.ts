@@ -88,16 +88,15 @@ function discoverPapers(basePath: string): PaperFiles[] {
   return papers.sort((a, b) => b.year - a.year || a.paper.localeCompare(b.paper))
 }
 
-// Check if question already exists in database
-async function questionExists(
+// Find existing question in database
+async function findQuestion(
   year: number,
   paper: string,
   questionNumber: string
-): Promise<boolean> {
-  const existing = await prisma.question.findFirst({
+) {
+  return await prisma.question.findFirst({
     where: { year, paper, questionNumber },
   })
-  return !!existing
 }
 
 // Ingest a single paper
@@ -131,13 +130,19 @@ export async function ingestPaper(paperFiles: PaperFiles) {
       `   Merged ${mergedQuestions.length} questions with mark schemes`
     )
 
-    // Step 4: Filter out duplicates
-    console.log('\n🔍 Step 4: Checking for duplicates in database...')
-    const newQuestions = []
+    // Step 4: Check for duplicates / updates
+    console.log('\n🔍 Step 4: Checking for duplicates/updates in database...')
+    const questionsToProcess = []
+    
     for (const q of mergedQuestions) {
-      const exists = await questionExists(year, paper, q.questionNumber)
-      if (!exists) {
-        newQuestions.push(q)
+      const existing = await findQuestion(year, paper, q.questionNumber)
+      
+      if (!existing) {
+        questionsToProcess.push({ action: 'create', q })
+      } else if (q.hasImage && !existing.imageUrl) {
+        // Question exists but is missing image - update it
+        console.log(`   ↻  Q${q.questionNumber} exists but missing image. Queued for update.`)
+        questionsToProcess.push({ action: 'update', q, id: existing.id })
       } else {
         console.log(
           `   ⏭️  Skipping ${year} ${paper} Q${q.questionNumber} (already exists)`
@@ -145,17 +150,19 @@ export async function ingestPaper(paperFiles: PaperFiles) {
       }
     }
 
-    if (newQuestions.length === 0) {
-      console.log('\n✅ No new questions to ingest (all already in database)')
+    if (questionsToProcess.length === 0) {
+      console.log('\n✅ No new questions or updates needed')
       return
     }
 
-    console.log(`   Found ${newQuestions.length} new questions to ingest`)
+    console.log(`   Processing ${questionsToProcess.length} questions...`)
 
     // Step 5: Save to database
-    console.log('\n💾 Step 5: Saving to database...')
+    console.log('\n💾 Step 5: Saving/Updating database...')
     const savedQuestions = []
-    for (const q of newQuestions) {
+    
+    for (const item of questionsToProcess) {
+      const { q, action, id } = item
       let imageUrl: string | null = null
 
       if (q.hasImage && q.figureBoundingBox && q.pageNumber) {
@@ -168,26 +175,43 @@ export async function ingestPaper(paperFiles: PaperFiles) {
           paper,
           q.questionNumber
         )
+      } else if (q.hasImage) {
+        console.warn(`   ⚠️  Q${q.questionNumber} has image but missing bbox/page. Skipping crop.`)
       }
 
-      const saved = await prisma.question.create({
-        data: {
-          year,
-          paper,
-          questionNumber: q.questionNumber,
-          topic: q.topic,
-          text: q.text,
-          markScheme: q.markScheme,
-          examinerRemarks: q.examinerRemarks,
-          marks: q.marks ?? 0,
-          difficulty: q.difficulty,
-          imageUrl,
-        },
-      })
-      savedQuestions.push(saved)
-      console.log(
-        `   ✓ Saved Q${q.questionNumber} (${q.topic}, ${q.marks} marks)`
-      )
+      if (action === 'create') {
+        const saved = await prisma.question.create({
+          data: {
+            year,
+            paper,
+            questionNumber: q.questionNumber,
+            topic: q.topic,
+            text: q.text,
+            markScheme: q.markScheme,
+            examinerRemarks: q.examinerRemarks,
+            marks: q.marks ?? 0,
+            difficulty: q.difficulty,
+            imageUrl,
+          },
+        })
+        savedQuestions.push(saved)
+        console.log(`   ✓ Created Q${q.questionNumber}`)
+      } else if (action === 'update' && id) {
+        const saved = await prisma.question.update({
+          where: { id },
+          data: {
+            imageUrl,
+            // Update other fields in case extraction improved
+            text: q.text,
+            markScheme: q.markScheme,
+            examinerRemarks: q.examinerRemarks,
+            marks: q.marks ?? 0,
+            difficulty: q.difficulty,
+          }
+        })
+        savedQuestions.push(saved)
+        console.log(`   ✓ Updated Q${q.questionNumber} with image`)
+      }
     }
 
     // Step 6: Generate embeddings
