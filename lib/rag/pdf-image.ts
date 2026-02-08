@@ -51,7 +51,7 @@ export async function cropAndSaveImage(
     await page.render({
       canvasContext: context as any,
       viewport,
-    }).promise
+    } as any).promise
 
     // Calculate crop coordinates
     // Gemini returns [ymin, xmin, ymax, xmax] on 0-1000 scale

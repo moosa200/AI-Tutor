@@ -112,10 +112,16 @@ export async function ingestPaper(paperFiles: PaperFiles) {
     // Step 1: Extract questions from QP
     console.log('\n📄 Step 1: Extracting questions from question paper...')
     const questions = await extractQuestionsFromPDF(questionPaperPath)
+    
+    console.log('⏳ Waiting 5 seconds...')
+    await new Promise((resolve) => setTimeout(resolve, 5000))
 
     // Step 2: Extract mark schemes
     console.log('\n📋 Step 2: Extracting mark schemes...')
     const markSchemes = await extractMarkSchemeFromPDF(markSchemePath)
+
+    console.log('⏳ Waiting 5 seconds...')
+    await new Promise((resolve) => setTimeout(resolve, 5000))
 
     // Step 3: Merge
     console.log('\n🔗 Step 3: Merging questions with mark schemes...')
