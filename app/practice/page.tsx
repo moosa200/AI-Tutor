@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Filter,
   Shuffle,
+  ImageOff,
 } from 'lucide-react'
 
 interface Question {
@@ -296,13 +297,21 @@ export default function PracticePage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {currentQuestion.imageUrl && (
+                  {currentQuestion.imageUrl ? (
                     <div className="mb-6 flex justify-center overflow-hidden rounded-lg border bg-white p-2">
                       <img
                         src={currentQuestion.imageUrl}
                         alt={`Figure for Q${currentQuestion.questionNumber}`}
                         className="h-auto max-h-[500px] max-w-full object-contain"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
                       />
+                    </div>
+                  ) : currentQuestion.text.includes('[Figure:') && (
+                    <div className="mb-6 flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-muted-foreground">
+                      <ImageOff className="h-8 w-8 mb-2 opacity-50" />
+                      <p className="text-sm font-medium">Diagram not available</p>
                     </div>
                   )}
                   <div className="prose prose-sm max-w-none whitespace-pre-wrap">

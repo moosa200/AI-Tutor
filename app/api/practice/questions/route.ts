@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         examinerRemarks: true,
         marks: true,
         difficulty: true,
+        imageUrl: true,
       },
       orderBy: [{ year: 'desc' }, { paper: 'asc' }, { questionNumber: 'asc' }],
     })
