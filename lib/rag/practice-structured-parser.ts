@@ -118,7 +118,20 @@ For EACH part:
      "explanation": "..."
    }
 
-7. subParts (array if the part has subparts like (i), (ii), (iii))
+7. subParts (ONLY if the part has subparts like (i), (ii), (iii))
+   Each subpart MUST have:
+   - subPartLabel: 'i', 'ii', 'iii', etc.
+   - subPartText: full text of the subpart
+   - marks: marks for this subpart
+   - inputType: same options as parts
+   - hasImage: true/false
+   - markScheme: same structure as parts
+
+IMPORTANT:
+- ALWAYS provide ALL required fields (partLabel, partText, marks, inputType, markScheme)
+- If a part has subparts, the parent part marks should be 0 or sum of subpart marks
+- NEVER use 'undefined' or 'null' for required string fields
+- For subparts, ALWAYS provide subPartLabel ('i', 'ii', 'iii') and subPartText
 
 FORMATTING RULES:
 - Use LaTeX: $F = ma$, $\\frac{1}{2}mv^2$, $E = mc^2$
@@ -150,6 +163,44 @@ Return JSON:
             "alternativeUnits": ["m/s^2", "ms^-2"],
             "maxMarks": 3
           }
+        },
+        {
+          "partLabel": "b",
+          "partText": "This part has subparts:",
+          "marks": 5,
+          "inputType": "TEXT",
+          "hasImage": false,
+          "markScheme": { "type": "text", "maxMarks": 0 },
+          "subParts": [
+            {
+              "subPartLabel": "i",
+              "subPartText": "Define velocity.",
+              "marks": 2,
+              "inputType": "TEXT",
+              "hasImage": false,
+              "markScheme": {
+                "type": "text",
+                "maxMarks": 2,
+                "keywords": ["displacement", "time"],
+                "requiredPoints": []
+              }
+            },
+            {
+              "subPartLabel": "ii",
+              "subPartText": "Calculate the velocity.",
+              "marks": 3,
+              "inputType": "NUMERICAL",
+              "hasImage": false,
+              "markScheme": {
+                "type": "numerical",
+                "correctValue": 15.5,
+                "unit": "m/s",
+                "tolerance": 0.1,
+                "alternativeUnits": [],
+                "maxMarks": 3
+              }
+            }
+          ]
         }
       ]
     }
@@ -159,11 +210,62 @@ Return JSON:
 Parse ALL questions from the paper.`
 
   const result = await model.generateContent(prompt)
-  const parsed = JSON.parse(result.response.text())
 
-  console.log(`✅ Parsed ${parsed.questions.length} structured questions`)
+  // Better JSON parsing with error handling
+  let parsed
+  try {
+    const responseText = result.response.text()
+    // Try to clean up common JSON issues
+    const cleanedText = responseText
+      .replace(/\n/g, '\\n') // Escape newlines in strings
+      .replace(/\t/g, '\\t') // Escape tabs
 
-  return parsed.questions
+    try {
+      parsed = JSON.parse(cleanedText)
+    } catch {
+      // If cleaning didn't work, try original
+      parsed = JSON.parse(responseText)
+    }
+  } catch (error) {
+    console.error('JSON parse error:', error)
+    throw new Error('Failed to parse Gemini response as JSON. Try running again.')
+  }
+
+  // Sanitize and fill in missing fields
+  const questions = parsed.questions.map((q: any) => ({
+    ...q,
+    parts: q.parts.map((part: any, partIdx: number) => {
+      const sanitizedPart = {
+        ...part,
+        partLabel: part.partLabel || String.fromCharCode(97 + partIdx), // a, b, c...
+        partText: part.partText || '',
+        marks: part.marks || 0,
+        inputType: part.inputType || 'TEXT',
+        hasImage: part.hasImage || false,
+        markScheme: part.markScheme || { type: 'text', maxMarks: part.marks || 0 },
+      }
+
+      // Handle subparts
+      if (part.subParts && Array.isArray(part.subParts)) {
+        const romanNumerals = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii']
+        sanitizedPart.subParts = part.subParts.map((subPart: any, subIdx: number) => ({
+          ...subPart,
+          subPartLabel: subPart.subPartLabel || romanNumerals[subIdx] || `${subIdx + 1}`,
+          subPartText: subPart.subPartText || subPart.partText || '',
+          marks: subPart.marks || 0,
+          inputType: subPart.inputType || 'TEXT',
+          hasImage: subPart.hasImage || false,
+          markScheme: subPart.markScheme || { type: 'text', maxMarks: subPart.marks || 0 },
+        }))
+      }
+
+      return sanitizedPart
+    }),
+  }))
+
+  console.log(`✅ Parsed ${questions.length} structured questions`)
+
+  return questions
 }
 
 // Helper to extract text from PDF
