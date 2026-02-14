@@ -95,7 +95,7 @@ async function findQuestion(
   questionNumber: string
 ) {
   return await prisma.question.findFirst({
-    where: { year, paper, questionNumber },
+    where: { year, paper, questionNumber: parseInt(questionNumber) },
   })
 }
 
