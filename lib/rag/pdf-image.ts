@@ -96,15 +96,29 @@ export async function cropAndSaveImage(
     // Convert Gemini's 0-1000 scale to pixel coordinates
     const [ymin, xmin, ymax, xmax] = boundingBox
 
-    const left = Math.round((xmin / 1000) * width)
-    const top = Math.round((ymin / 1000) * height)
-    const cropWidth = Math.round(((xmax - xmin) / 1000) * width)
-    const cropHeight = Math.round(((ymax - ymin) / 1000) * height)
+    // Add 2% padding to avoid cutting off edges
+    const PADDING_PERCENT = 2
+    const xPadding = Math.round(((xmax - xmin) * PADDING_PERCENT) / 100)
+    const yPadding = Math.round(((ymax - ymin) * PADDING_PERCENT) / 100)
+
+    // Calculate crop dimensions with padding
+    let left = Math.max(0, Math.round((xmin / 1000) * width) - xPadding)
+    let top = Math.max(0, Math.round((ymin / 1000) * height) - yPadding)
+    let cropWidth = Math.round(((xmax - xmin) / 1000) * width) + 2 * xPadding
+    let cropHeight = Math.round(((ymax - ymin) / 1000) * height) + 2 * yPadding
+
+    // Ensure we don't exceed image boundaries
+    cropWidth = Math.min(cropWidth, width - left)
+    cropHeight = Math.min(cropHeight, height - top)
 
     if (cropWidth <= 0 || cropHeight <= 0) {
       console.warn(`⚠️  Invalid crop dimensions for Q${questionNumber}`)
       return null
     }
+
+    console.log(
+      `   📐 Crop: ${cropWidth}x${cropHeight} at (${left},${top}) from ${width}x${height}`
+    )
 
     // Generate filename
     const safePaper = paper.replace(/\s+/g, '_')

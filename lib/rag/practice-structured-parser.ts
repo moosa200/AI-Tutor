@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { InputType } from '@prisma/client'
+import fs from 'fs'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -11,7 +12,7 @@ export interface StructuredSubPart {
   markScheme: any
   hasImage: boolean
   pageNumber?: number
-  imageBoundingBox?: { x: number; y: number; width: number; height: number }
+  imageBoundingBox?: [number, number, number, number] // [ymin, xmin, ymax, xmax] on 0-1000 scale
 }
 
 export interface StructuredPart {
@@ -22,7 +23,7 @@ export interface StructuredPart {
   markScheme: any
   hasImage: boolean
   pageNumber?: number
-  imageBoundingBox?: { x: number; y: number; width: number; height: number }
+  imageBoundingBox?: [number, number, number, number] // [ymin, xmin, ymax, xmax] on 0-1000 scale
   subParts?: StructuredSubPart[]
 }
 
@@ -33,7 +34,7 @@ export interface StructuredQuestion {
   difficulty: 'easy' | 'medium' | 'hard'
   hasImage: boolean
   pageNumber?: number
-  imageBoundingBox?: { x: number; y: number; width: number; height: number }
+  imageBoundingBox?: [number, number, number, number] // [ymin, xmin, ymax, xmax] on 0-1000 scale
   parts: StructuredPart[]
 }
 
@@ -41,38 +42,66 @@ export async function parseStructuredPaper(
   questionPaperPath: string,
   markSchemePath: string
 ): Promise<StructuredQuestion[]> {
-  console.log('📄 Extracting text from structured question paper...')
-  const qpText = await extractTextFromPDF(questionPaperPath)
+  console.log('📄 Processing structured question paper with vision...')
 
   console.log('📋 Extracting text from mark scheme...')
   const msText = await extractTextFromPDF(markSchemePath)
 
-  console.log('🤖 Using Gemini to parse structured questions...')
+  console.log('🤖 Using Gemini Vision to parse structured questions in chunks...')
 
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-    },
-  })
+  // Load PDF and split into chunks
+  const { PDFDocument } = await import('pdf-lib')
+  const pdfBuffer = fs.readFileSync(questionPaperPath)
+  const pdfDoc = await PDFDocument.load(pdfBuffer)
+  const totalPages = pdfDoc.getPageCount()
+  const CHUNK_SIZE = 5 // Process 5 pages at a time
 
-  const prompt = `You are parsing an A-Level Physics structured question paper and its mark scheme.
+  const allQuestions: StructuredQuestion[] = []
 
-QUESTION PAPER TEXT:
-${qpText.substring(0, 50000)}
+  console.log(`   Splitting ${totalPages} pages into chunks of ${CHUNK_SIZE}...`)
+
+  for (let i = 0; i < totalPages; i += CHUNK_SIZE) {
+    const startPage = i
+    const endPage = Math.min(i + CHUNK_SIZE, totalPages)
+    console.log(`   Processing chunk: Pages ${startPage + 1}-${endPage}`)
+
+    // Add delay to avoid rate limits
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, 5000))
+
+    // Create chunk PDF
+    const chunkPdf = await PDFDocument.create()
+    const pages = await chunkPdf.copyPages(
+      pdfDoc,
+      Array.from({ length: endPage - startPage }, (_, k) => startPage + k)
+    )
+    pages.forEach((p) => chunkPdf.addPage(p))
+    const chunkBytes = await chunkPdf.save()
+    const chunkBase64 = Buffer.from(chunkBytes).toString('base64')
+
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 8192,
+      },
+    })
+
+    const prompt = `You are parsing an A-Level Physics structured question paper PDF using vision and its mark scheme.
 
 MARK SCHEME TEXT:
-${msText.substring(0, 30000)}
+${msText.substring(0, 20000)}
 
-Extract ALL questions with their parts and subparts.
+Extract ALL questions with their parts and subparts from this chunk of the paper.
 
 For EACH question:
 1. questionNumber (integer)
 2. totalMarks (total marks for the question)
 3. topic (classify as: Kinematics, Forces, Energy, Waves, Electricity, Magnetism, Nuclear Physics, etc.)
 4. difficulty ('easy', 'medium', 'hard')
-5. hasImage (true if question stem has diagram)
-6. parts (array of parts)
+5. hasImage (true if question stem has diagram/table/graph)
+6. pageNumber (REQUIRED if hasImage is true - page number where the image appears, 1-based integer)
+7. imageBoundingBox (REQUIRED if hasImage is true - bounding box as [ymin, xmin, ymax, xmax] on 0-1000 scale)
+8. parts (array of parts)
 
 For EACH part:
 1. partLabel ('a', 'b', 'c', etc.)
@@ -83,8 +112,10 @@ For EACH part:
    - "TEXT" for definitions, short explanations (1-2 sentences)
    - "LONG_TEXT" for "Explain", "Describe", "Discuss" (multiple marks, 3+)
    - "MCQ_INLINE" if multiple choice within structured question
-5. hasImage (true if this part has a diagram)
-6. markScheme (structured JSON based on inputType):
+5. hasImage (true if this part has a diagram/table/graph)
+6. pageNumber (REQUIRED if hasImage is true - page number where the image appears, 1-based integer)
+7. imageBoundingBox (REQUIRED if hasImage is true - bounding box as [ymin, xmin, ymax, xmax] on 0-1000 scale)
+8. markScheme (structured JSON based on inputType):
 
    For NUMERICAL:
    {
@@ -118,13 +149,15 @@ For EACH part:
      "explanation": "..."
    }
 
-7. subParts (ONLY if the part has subparts like (i), (ii), (iii))
+9. subParts (ONLY if the part has subparts like (i), (ii), (iii))
    Each subpart MUST have:
    - subPartLabel: 'i', 'ii', 'iii', etc.
    - subPartText: full text of the subpart
    - marks: marks for this subpart
    - inputType: same options as parts
    - hasImage: true/false
+   - pageNumber: REQUIRED if hasImage is true (page number, 1-based integer)
+   - imageBoundingBox: REQUIRED if hasImage is true ([ymin, xmin, ymax, xmax] on 0-1000 scale)
    - markScheme: same structure as parts
 
 IMPORTANT:
@@ -207,32 +240,55 @@ Return JSON:
   ]
 }
 
-Parse ALL questions from the paper.`
+Parse ALL questions from this chunk of the paper.`
 
-  const result = await model.generateContent(prompt)
+    let chunkQuestions: StructuredQuestion[] = []
+    let parseSuccess = false
+    let retryCount = 0
 
-  // Better JSON parsing with error handling
-  let parsed
-  try {
-    const responseText = result.response.text()
-    // Try to clean up common JSON issues
-    const cleanedText = responseText
-      .replace(/\n/g, '\\n') // Escape newlines in strings
-      .replace(/\t/g, '\\t') // Escape tabs
+    while (!parseSuccess && retryCount < 2) {
+      try {
+        const result = await model.generateContent([
+          {
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: chunkBase64,
+            },
+          },
+          { text: prompt },
+        ])
 
-    try {
-      parsed = JSON.parse(cleanedText)
-    } catch {
-      // If cleaning didn't work, try original
-      parsed = JSON.parse(responseText)
-    }
-  } catch (error) {
-    console.error('JSON parse error:', error)
-    throw new Error('Failed to parse Gemini response as JSON. Try running again.')
-  }
+        const responseText = result.response.text()
 
-  // Sanitize and fill in missing fields
-  const questions = parsed.questions.map((q: any) => ({
+        if (!responseText || responseText.trim().length === 0) {
+          throw new Error('Gemini returned empty response')
+        }
+
+        let parsed
+        try {
+          // Try to clean up common JSON issues
+          const cleanedText = responseText
+            .replace(/\n/g, '\\n') // Escape newlines in strings
+            .replace(/\t/g, '\\t') // Escape tabs
+
+          try {
+            parsed = JSON.parse(cleanedText)
+          } catch {
+            // If cleaning didn't work, try original
+            parsed = JSON.parse(responseText)
+          }
+        } catch (error) {
+          console.error('❌ JSON parse error. Response preview:')
+          console.error(responseText.substring(0, 500))
+          throw new Error(`Failed to parse JSON: ${error}`)
+        }
+
+        if (!parsed.questions || !Array.isArray(parsed.questions)) {
+          throw new Error('Invalid response format: missing questions array')
+        }
+
+        // Sanitize and fill in missing fields
+        const questions = parsed.questions.map((q: any) => ({
     ...q,
     parts: q.parts.map((part: any, partIdx: number) => {
       const sanitizedPart = {
@@ -263,9 +319,48 @@ Parse ALL questions from the paper.`
     }),
   }))
 
-  console.log(`✅ Parsed ${questions.length} structured questions`)
+        chunkQuestions = questions
+        allQuestions.push(...chunkQuestions)
+        console.log(`   ✓ Extracted ${chunkQuestions.length} questions from chunk`)
+        parseSuccess = true
+      } catch (e) {
+        console.error(
+          `   ❌ Error parsing chunk ${startPage + 1}-${endPage} (Attempt ${retryCount + 1}):`,
+          e
+        )
+        retryCount++
+        if (retryCount < 2) {
+          console.log('   🔄 Retrying chunk...')
+          await new Promise((resolve) => setTimeout(resolve, 5000))
+        }
+      }
+    }
 
-  return questions
+    if (!parseSuccess) {
+      console.warn(`   ⚠️  Failed to process chunk ${startPage + 1}-${endPage} after retries`)
+    }
+  }
+
+  console.log(`✅ Parsed ${allQuestions.length} total structured questions`)
+
+  // Deduplicate by question number
+  const seen = new Set<number>()
+  const deduplicated = allQuestions.filter((q) => {
+    if (seen.has(q.questionNumber)) {
+      console.warn(`⚠️  Duplicate question ${q.questionNumber} (skipping)`)
+      return false
+    }
+    seen.add(q.questionNumber)
+    return true
+  })
+
+  if (deduplicated.length < allQuestions.length) {
+    console.log(
+      `🔧 Deduplicated: ${allQuestions.length} → ${deduplicated.length} questions`
+    )
+  }
+
+  return deduplicated
 }
 
 // Helper to extract text from PDF

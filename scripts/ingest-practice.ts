@@ -7,8 +7,7 @@ import {
   parseStructuredPaper,
   StructuredQuestion,
 } from '../lib/rag/practice-structured-parser'
-import { uploadQuestionImage } from '../lib/supabase-storage'
-import { cropAndSaveImage } from '../lib/rag/pdf-image'
+import { extractAndUploadImage } from '../lib/rag/image-extraction'
 
 const prisma = new PrismaClient()
 
@@ -127,6 +126,29 @@ async function ingestMCQPaper(paperFiles: PaperFiles) {
         continue
       }
 
+      // Extract and upload image if present
+      let images = undefined
+      if (q.hasImage && q.imageBoundingBox && q.pageNumber) {
+        try {
+          console.log(`   📸 Extracting image for Q${q.questionNumber}...`)
+          const imageUrl = await extractAndUploadImage(
+            questionPaperPath,
+            q.pageNumber,
+            q.imageBoundingBox,
+            year,
+            paper,
+            `q${q.questionNumber}`
+          )
+
+          if (imageUrl) {
+            images = [{ url: imageUrl }]
+          }
+        } catch (error) {
+          console.warn(`   ⚠️  Failed to extract image for Q${q.questionNumber}:`, error)
+          // Continue without image - don't block question creation
+        }
+      }
+
       // Create question
       await prisma.question.create({
         data: {
@@ -146,6 +168,7 @@ async function ingestMCQPaper(paperFiles: PaperFiles) {
           difficulty: q.difficulty,
           topics: [q.topic],
           syllabus: '9702',
+          images,
           updatedAt: new Date(),
         },
       })
@@ -198,6 +221,113 @@ async function ingestStructuredPaper(paperFiles: PaperFiles) {
         continue
       }
 
+      // Extract question-level image
+      let questionImages = undefined
+      if (q.hasImage && q.imageBoundingBox && q.pageNumber) {
+        try {
+          console.log(`   📸 Extracting question image for Q${q.questionNumber}...`)
+          const imageUrl = await extractAndUploadImage(
+            questionPaperPath,
+            q.pageNumber,
+            q.imageBoundingBox,
+            year,
+            paper,
+            `q${q.questionNumber}`
+          )
+          if (imageUrl) {
+            questionImages = [{ url: imageUrl }]
+          }
+        } catch (error) {
+          console.warn(`   ⚠️  Failed to extract question image for Q${q.questionNumber}:`, error)
+        }
+      }
+
+      // Extract part-level and subpart-level images
+      const partsWithImages = await Promise.all(
+        q.parts.map(async (part, partIdx) => {
+          let partImages = undefined
+          if (part.hasImage && part.imageBoundingBox && part.pageNumber) {
+            try {
+              console.log(`   📸 Extracting part image for Q${q.questionNumber}${part.partLabel}...`)
+              const imageUrl = await extractAndUploadImage(
+                questionPaperPath,
+                part.pageNumber,
+                part.imageBoundingBox,
+                year,
+                paper,
+                `q${q.questionNumber}${part.partLabel}`
+              )
+              if (imageUrl) {
+                partImages = [{ url: imageUrl }]
+              }
+            } catch (error) {
+              console.warn(
+                `   ⚠️  Failed to extract part image for Q${q.questionNumber}${part.partLabel}:`,
+                error
+              )
+            }
+          }
+
+          // Extract subpart images
+          let subPartsWithImages = undefined
+          if (part.subParts) {
+            subPartsWithImages = await Promise.all(
+              part.subParts.map(async (subPart, subIdx) => {
+                let subPartImages = undefined
+                if (subPart.hasImage && subPart.imageBoundingBox && subPart.pageNumber) {
+                  try {
+                    console.log(
+                      `   📸 Extracting subpart image for Q${q.questionNumber}${part.partLabel}${subPart.subPartLabel}...`
+                    )
+                    const imageUrl = await extractAndUploadImage(
+                      questionPaperPath,
+                      subPart.pageNumber,
+                      subPart.imageBoundingBox,
+                      year,
+                      paper,
+                      `q${q.questionNumber}${part.partLabel}${subPart.subPartLabel}`
+                    )
+                    if (imageUrl) {
+                      subPartImages = [{ url: imageUrl }]
+                    }
+                  } catch (error) {
+                    console.warn(
+                      `   ⚠️  Failed to extract subpart image for Q${q.questionNumber}${part.partLabel}${subPart.subPartLabel}:`,
+                      error
+                    )
+                  }
+                }
+
+                return {
+                  subPartLabel: subPart.subPartLabel,
+                  subPartText: subPart.subPartText,
+                  marks: subPart.marks,
+                  inputType: subPart.inputType as InputType,
+                  markScheme: subPart.markScheme,
+                  images: subPartImages,
+                  order: subIdx + 1,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                }
+              })
+            )
+          }
+
+          return {
+            partLabel: part.partLabel,
+            partText: part.partText,
+            marks: part.subParts ? part.subParts.reduce((sum, sp) => sum + sp.marks, 0) : part.marks,
+            inputType: part.inputType as InputType,
+            markScheme: part.markScheme,
+            images: partImages,
+            order: partIdx + 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            subParts: subPartsWithImages ? { create: subPartsWithImages } : undefined,
+          }
+        })
+      )
+
       // Create question with parts
       await prisma.question.create({
         data: {
@@ -210,32 +340,10 @@ async function ingestStructuredPaper(paperFiles: PaperFiles) {
           difficulty: q.difficulty,
           topics: [q.topic],
           syllabus: '9702',
+          images: questionImages,
           updatedAt: new Date(),
           parts: {
-            create: q.parts.map((part, partIdx) => ({
-              partLabel: part.partLabel,
-              partText: part.partText,
-              marks: part.subParts ? part.subParts.reduce((sum, sp) => sum + sp.marks, 0) : part.marks,
-              inputType: part.inputType as InputType,
-              markScheme: part.markScheme,
-              order: partIdx + 1,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              subParts: part.subParts
-                ? {
-                    create: part.subParts.map((subPart, subIdx) => ({
-                      subPartLabel: subPart.subPartLabel,
-                      subPartText: subPart.subPartText,
-                      marks: subPart.marks,
-                      inputType: subPart.inputType as InputType,
-                      markScheme: subPart.markScheme,
-                      order: subIdx + 1,
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                    })),
-                  }
-                : undefined,
-            })),
+            create: partsWithImages,
           },
         },
       })
