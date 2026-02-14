@@ -9,7 +9,7 @@ datasource db {
 }
 
 model Attempt {
-  id             String   @id
+  id             String   @id @default(cuid())
   userId         String
   questionId     String
   selectedOption String?
@@ -29,7 +29,7 @@ model Attempt {
 }
 
 model ChatMessage {
-  id        String   @id
+  id        String   @id @default(cuid())
   userId    String
   role      String
   content   String
@@ -39,7 +39,7 @@ model ChatMessage {
 }
 
 model Question {
-  id             String         @id
+  id             String         @id @default(cuid())
   year           Int
   paper          Int
   questionNumber Int
@@ -71,7 +71,7 @@ model Question {
 }
 
 model QuestionPart {
-  id              String            @id
+  id              String            @id @default(cuid())
   questionId      String
   partLabel       String
   partText        String
@@ -89,7 +89,7 @@ model QuestionPart {
 }
 
 model QuestionSubPart {
-  id           String       @id
+  id           String       @id @default(cuid())
   partId       String
   subPartLabel String
   subPartText  String
@@ -106,7 +106,7 @@ model QuestionSubPart {
 }
 
 model Topic {
-  id          String     @id
+  id          String     @id @default(cuid())
   name        String     @unique
   level       String
   description String?
@@ -115,7 +115,7 @@ model Topic {
 }
 
 model User {
-  id        String    @id
+  id        String    @id @default(cuid())
   clerkId   String    @unique
   email     String    @unique
   createdAt DateTime  @default(now())
