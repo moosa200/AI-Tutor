@@ -90,7 +90,10 @@ export async function POST(req: NextRequest) {
         results.push({
           partId: part.id,
           partLabel: part.partLabel,
-          ...result,
+          score: result.marks, // Frontend expects score
+          maxScore: part.marks, // Frontend expects maxScore
+          feedback: result.feedback,
+          mistakeTags: result.mistakeTags,
         })
 
         totalScore += result.marks
@@ -111,7 +114,10 @@ export async function POST(req: NextRequest) {
           results.push({
             subPartId: subPart.id,
             partLabel: `${part.partLabel}(${subPart.subPartLabel})`,
-            ...result,
+            score: result.marks, // Frontend expects score
+            maxScore: subPart.marks, // Frontend expects maxScore
+            feedback: result.feedback,
+            mistakeTags: result.mistakeTags,
           })
 
           totalScore += result.marks
@@ -151,9 +157,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       totalScore,
-      totalMaxScore,
+      totalMarks: totalMaxScore, // Frontend expects totalMarks
       percentage: Math.round((totalScore / totalMaxScore) * 100),
-      results,
+      partResults: results, // Frontend expects partResults
     })
   } catch (error) {
     console.error('Marking error:', error)
