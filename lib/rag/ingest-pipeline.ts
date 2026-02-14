@@ -94,8 +94,9 @@ async function findQuestion(
   paper: string,
   questionNumber: string
 ) {
+  const paperInt = parseInt(paper.replace(/\D/g, ''))
   return await prisma.question.findFirst({
-    where: { year, paper, questionNumber: parseInt(questionNumber) },
+    where: { year, paper: paperInt, questionNumber: parseInt(questionNumber) },
   })
 }
 
@@ -160,6 +161,7 @@ export async function ingestPaper(paperFiles: PaperFiles) {
     // Step 5: Save to database
     console.log('\n💾 Step 5: Saving/Updating database...')
     const savedQuestions = []
+    const paperInt = parseInt(paper.replace(/\D/g, ''))
     
     for (const item of questionsToProcess) {
       const { q, action, id } = item
@@ -184,7 +186,7 @@ export async function ingestPaper(paperFiles: PaperFiles) {
         const saved = await prisma.question.create({
           data: {
             year,
-            paper,
+            paper: paperInt,
             questionNumber: q.questionNumber,
             topic: q.topic,
             text: q.text,
@@ -228,8 +230,8 @@ export async function ingestPaper(paperFiles: PaperFiles) {
       values: embeddings[idx],
       metadata: {
         year: q.year,
-        paper: q.paper,
-        questionNumber: q.questionNumber,
+        paper: paper,
+        questionNumber: q.questionNumber.toString(),
         topic: q.topic,
         text: q.text,
         markScheme: q.markScheme,
