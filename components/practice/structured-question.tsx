@@ -189,7 +189,7 @@ export function StructuredQuestion({
             )}
 
             {/* Input Field for Part (if no subparts) */}
-            {!part.subParts && (
+            {(!part.subParts || part.subParts.length === 0) && (
               <div>
                 {renderInput(
                   part.id,
