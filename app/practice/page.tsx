@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -18,7 +17,6 @@ import {
 import {
   BookOpen,
   ArrowLeft,
-  Send,
   Loader2,
   CheckCircle,
   XCircle,
@@ -26,35 +24,58 @@ import {
   ChevronRight,
   Filter,
   Shuffle,
-  ImageOff,
 } from 'lucide-react'
+import { MCQQuestion } from '@/components/practice/mcq-question'
+import { StructuredQuestion } from '@/components/practice/structured-question'
+
+interface QuestionPart {
+  id: string
+  partLabel: string
+  partText: string
+  marks: number
+  inputType: string
+  images: any
+  markScheme: any
+  options?: string[]
+  subParts?: QuestionSubPart[]
+}
+
+interface QuestionSubPart {
+  id: string
+  subPartLabel: string
+  subPartText: string
+  marks: number
+  inputType: string
+  images: any
+  markScheme: any
+  options?: string[]
+}
 
 interface Question {
   id: string
   year: number
-  paper: string
-  questionNumber: string
+  paper: number
+  questionNumber: number
+  type: 'MCQ' | 'STRUCTURED'
+  totalMarks: number
   topic: string
-  text: string
-  markScheme: string
-  examinerRemarks: string | null
-  marks: number
-  difficulty: string
-  imageUrl: string | null
+  difficulty?: string
+  // MCQ fields
+  questionText?: string
+  optionA?: string
+  optionB?: string
+  optionC?: string
+  optionD?: string
+  correctOption?: string
+  explanation?: string
+  // Structured fields
+  parts?: QuestionPart[]
+  images?: any
 }
 
 interface TopicInfo {
   name: string
   count: number
-}
-
-interface MarkingResult {
-  score: number
-  maxScore: number
-  feedback: string
-  breakdown: { point: string; awarded: boolean; comment: string }[]
-  mistakeTags: string[]
-  improvements: string[]
 }
 
 export default function PracticePage() {
@@ -64,11 +85,9 @@ export default function PracticePage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState('all')
   const [selectedPaperType, setSelectedPaperType] = useState('all')
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [answer, setAnswer] = useState('')
-  const [isMarking, setIsMarking] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [result, setResult] = useState<MarkingResult | null>(null)
-  const [imageLoadErrors, setImageLoadErrors] = useState<Record<string, boolean>>({})
+  const [result, setResult] = useState<any>(null)
 
   // Fetch questions when filters change
   useEffect(() => {
@@ -89,7 +108,6 @@ export default function PracticePage() {
       setQuestions(data.questions || [])
       if (data.topics) setTopics(data.topics)
       setCurrentQuestionIndex(0)
-      setAnswer('')
       setResult(null)
     } catch (error) {
       console.error('Failed to fetch questions:', error)
@@ -100,52 +118,66 @@ export default function PracticePage() {
 
   const currentQuestion = questions[currentQuestionIndex]
 
-  const handleSubmit = async () => {
-    if (!answer.trim() || !currentQuestion) return
+  const handleMCQSubmit = async (selectedOption: string) => {
+    if (!currentQuestion) return
 
-    setIsMarking(true)
+    setIsSubmitting(true)
     setResult(null)
 
     try {
-      const response = await fetch('/api/practice/submit', {
+      const response = await fetch('/api/practice/mark-mcq', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           questionId: currentQuestion.id,
-          studentAnswer: answer,
-          question: {
-            text: currentQuestion.text,
-            markScheme: currentQuestion.markScheme,
-            marks: currentQuestion.marks,
-            examinerRemarks: currentQuestion.examinerRemarks,
-          },
+          selectedOption,
         }),
       })
 
       const data = await response.json()
       if (data.success) {
-        setResult(data.result)
+        setResult(data)
       } else {
         throw new Error(data.error)
       }
     } catch (error) {
       console.error('Marking error:', error)
-      setResult({
-        score: 0,
-        maxScore: currentQuestion.marks,
-        feedback: 'Failed to mark your answer. Please try again.',
-        breakdown: [],
-        mistakeTags: ['error'],
-        improvements: [],
-      })
     } finally {
-      setIsMarking(false)
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleStructuredSubmit = async (answers: Record<string, any>) => {
+    if (!currentQuestion) return
+
+    setIsSubmitting(true)
+    setResult(null)
+
+    try {
+      const response = await fetch('/api/practice/mark-structured', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionId: currentQuestion.id,
+          answers,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        setResult(data)
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (error) {
+      console.error('Marking error:', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   const nextQuestion = () => {
     setCurrentQuestionIndex((prev) => (prev + 1) % questions.length)
-    setAnswer('')
     setResult(null)
   }
 
@@ -156,16 +188,18 @@ export default function PracticePage() {
       newIndex = Math.floor(Math.random() * questions.length)
     } while (newIndex === currentQuestionIndex)
     setCurrentQuestionIndex(newIndex)
-    setAnswer('')
     setResult(null)
   }
 
   const resetQuestion = () => {
-    setAnswer('')
     setResult(null)
+    // Force re-render by updating key
+    setCurrentQuestionIndex((prev) => prev)
   }
 
-  const scorePercentage = result ? (result.score / result.maxScore) * 100 : 0
+  const scorePercentage = result
+    ? (result.totalScore / result.totalMarks) * 100
+    : 0
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -276,200 +310,142 @@ export default function PracticePage() {
           </Card>
         )}
 
-        {/* Question and Answer */}
-        {!isLoading && currentQuestion && (
-          <>
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Question Card */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Badge variant="secondary" className="mb-2">
-                        {currentQuestion.topic}
-                      </Badge>
-                      <CardTitle className="text-lg">
-                        {currentQuestion.year} {currentQuestion.paper} Q{currentQuestion.questionNumber}
-                      </CardTitle>
-                      <CardDescription>
-                        {currentQuestion.marks} marks | {currentQuestion.difficulty}
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {currentQuestion.imageUrl && !imageLoadErrors[currentQuestion.id] ? (
-                    <div className="mb-6 flex justify-center overflow-hidden rounded-lg border bg-white p-2">
-                      <img
-                        src={currentQuestion.imageUrl}
-                        alt={`Figure for Q${currentQuestion.questionNumber}`}
-                        className="h-auto max-h-[500px] max-w-full object-contain"
-                        onError={() => setImageLoadErrors((prev) => ({ ...prev, [currentQuestion.id]: true }))}
-                      />
-                    </div>
-                  ) : currentQuestion.text.includes('[Figure:') && (
-                    <div className="mb-6 flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-muted-foreground">
-                      <ImageOff className="h-8 w-8 mb-2 opacity-50" />
-                      <p className="text-sm font-medium">Diagram not available</p>
-                      {currentQuestion.imageUrl && (
-                        <p className="text-xs mt-1 text-destructive">Image failed to load</p>
-                      )}
-                    </div>
-                  )}
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                    {currentQuestion.text}
-                  </div>
-                </CardContent>
-              </Card>
+        {/* Question Display */}
+        {!isLoading && currentQuestion && !result && (
+          <Card>
+            <CardContent className="p-6">
+              {currentQuestion.type === 'MCQ' ? (
+                <MCQQuestion
+                  question={currentQuestion}
+                  onSubmit={handleMCQSubmit}
+                  isSubmitting={isSubmitting}
+                />
+              ) : (
+                <StructuredQuestion
+                  question={currentQuestion}
+                  onSubmit={handleStructuredSubmit}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-              {/* Answer Card */}
+        {/* Results */}
+        {result && (
+          <div className="space-y-6">
+            {/* Score Overview */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">Marking Result</CardTitle>
+                    <CardDescription>
+                      Score: {result.totalScore}/{result.totalMarks} marks
+                    </CardDescription>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold">
+                      {Math.round(scorePercentage)}%
+                    </div>
+                    <Progress value={scorePercentage} className="w-24 mt-2" />
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+
+            {/* MCQ Result */}
+            {currentQuestion.type === 'MCQ' && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Your Answer</CardTitle>
-                  <CardDescription>
-                    Write your answer below. Include all working and units.
-                  </CardDescription>
+                  <CardTitle className="text-lg">
+                    {result.isCorrect ? (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <CheckCircle className="h-5 w-5" />
+                        Correct!
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-red-600">
+                        <XCircle className="h-5 w-5" />
+                        Incorrect
+                      </div>
+                    )}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Textarea
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    placeholder="Enter your answer here...&#10;&#10;Show all working and include units."
-                    className="min-h-[200px] font-mono text-sm"
-                    disabled={isMarking || !!result}
-                  />
-                  <div className="flex gap-2">
-                    {!result ? (
-                      <Button
-                        onClick={handleSubmit}
-                        disabled={!answer.trim() || isMarking}
-                        className="flex-1"
-                      >
-                        {isMarking ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Marking...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="mr-2 h-4 w-4" />
-                            Submit for Marking
-                          </>
-                        )}
-                      </Button>
-                    ) : (
-                      <>
-                        <Button variant="outline" onClick={resetQuestion}>
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Try Again
-                        </Button>
-                        <Button onClick={nextQuestion}>
-                          Next Question
-                          <ChevronRight className="ml-2 h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Results Card */}
-            {result && (
-              <Card className="mt-6">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg">Marking Result</CardTitle>
-                      <CardDescription>
-                        Score: {result.score}/{result.maxScore} marks
-                      </CardDescription>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-3xl font-bold">
-                        {Math.round(scorePercentage)}%
-                      </div>
-                      <Progress value={scorePercentage} className="w-24 mt-2" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Feedback */}
                   <div>
-                    <h4 className="font-semibold mb-2">Overall Feedback</h4>
-                    <p className="text-sm text-muted-foreground">{result.feedback}</p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Your answer: <strong>{result.selectedOption}</strong>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Correct answer: <strong>{result.correctOption}</strong>
+                    </p>
                   </div>
-
-                  {/* Breakdown */}
-                  {result.breakdown.length > 0 && (
+                  {result.explanation && (
                     <div>
-                      <h4 className="font-semibold mb-2">Mark Breakdown</h4>
-                      <ScrollArea className="h-[200px]">
-                        <div className="space-y-2">
-                          {result.breakdown.map((item, index) => (
-                            <div
-                              key={index}
-                              className="flex items-start gap-2 p-2 rounded-lg bg-muted/50"
-                            >
-                              {item.awarded ? (
-                                <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                              ) : (
-                                <XCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                              )}
-                              <div className="text-sm">
-                                <p className="font-medium">{item.point}</p>
-                                <p className="text-muted-foreground">{item.comment}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
+                      <h4 className="font-semibold mb-2">Explanation</h4>
+                      <p className="text-sm text-muted-foreground">{result.explanation}</p>
                     </div>
                   )}
-
-                  {/* Mistake Tags */}
-                  {result.mistakeTags.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold mb-2">Areas to Improve</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {result.mistakeTags.map((tag, index) => (
-                          <Badge key={index} variant="destructive">
-                            {tag.replace(/_/g, ' ')}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Improvements */}
-                  {result.improvements.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold mb-2">Suggestions for Improvement</h4>
-                      <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                        {result.improvements.map((improvement, index) => (
-                          <li key={index}>{improvement}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Mark Scheme Reveal */}
-                  <div>
-                    <h4 className="font-semibold mb-2">Official Mark Scheme</h4>
-                    <div className="p-3 rounded-lg bg-muted text-sm whitespace-pre-wrap font-mono">
-                      {currentQuestion.markScheme}
-                    </div>
-                    {currentQuestion.examinerRemarks && (
-                      <div className="mt-2 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm">
-                        <p className="font-medium text-yellow-800">Examiner&apos;s Remarks:</p>
-                        <p className="text-yellow-700">{currentQuestion.examinerRemarks}</p>
-                      </div>
-                    )}
-                  </div>
                 </CardContent>
               </Card>
             )}
-          </>
+
+            {/* Structured Result */}
+            {currentQuestion.type === 'STRUCTURED' && result.partResults && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Part-by-Part Results</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-4">
+                      {result.partResults.map((partResult: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className="border-l-4 border-primary pl-4 space-y-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-semibold">
+                              Part ({partResult.partLabel})
+                            </h4>
+                            <Badge
+                              variant={
+                                partResult.score === partResult.maxScore
+                                  ? 'default'
+                                  : partResult.score > 0
+                                  ? 'secondary'
+                                  : 'destructive'
+                              }
+                            >
+                              {partResult.score}/{partResult.maxScore} marks
+                            </Badge>
+                          </div>
+                          {partResult.feedback && (
+                            <p className="text-sm text-muted-foreground">
+                              {partResult.feedback}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Navigation */}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={resetQuestion} className="flex-1">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Try Again
+              </Button>
+              <Button onClick={nextQuestion} className="flex-1">
+                Next Question
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         )}
       </main>
     </div>

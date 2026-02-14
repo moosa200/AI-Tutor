@@ -3,76 +3,133 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-model User {
-  id        String    @id @default(cuid())
-  clerkId   String    @unique
-  email     String    @unique
-  createdAt DateTime  @default(now())
-  attempts  Attempt[]
-}
-
-model Topic {
-  id          String     @id @default(cuid())
-  name        String     @unique
-  level       String     // AS or A2
-  description String?
-  status      String     @default("not_started") // not_started, in_progress, completed
-  questions   Question[]
-}
-
-model Question {
-  id              String    @id @default(cuid())
-  year            Int
-  paper           String    // e.g., "Paper 2", "Paper 4"
-  questionNumber  String    // e.g., "1a", "2b(ii)"
-  topic           String    // Topic name for easy filtering
-  topicRelation   Topic?    @relation(fields: [topicId], references: [id])
-  topicId         String?
-  text            String    // The question text
-  markScheme      String    // Mark scheme for this question
-  examinerRemarks String?   // Examiner tips/remarks if available
-  imageUrl        String?   // URL to the figure image if present
-  marks           Int       // Total marks for this question
-  difficulty      String    @default("medium") // easy, medium, hard
-  createdAt       DateTime  @default(now())
-  attempts        Attempt[]
-
-  @@unique([year, paper, questionNumber])
-  @@index([topic])
-  @@index([year])
-  @@index([difficulty])
-}
-
 model Attempt {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questionId    String
-  question      Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  studentAnswer String   // What the student submitted
-  score         Int      // Marks awarded
-  maxScore      Int      // Maximum marks possible
-  feedback      String   // AI-generated detailed feedback
-  mistakeTags   String[] // Array of mistake categories, e.g., ["unit_error", "sig_fig", "concept_error"]
-  createdAt     DateTime @default(now())
+  id             String   @id
+  userId         String
+  questionId     String
+  selectedOption String?
+  answers        Json?
+  score          Int
+  maxScore       Int
+  feedback       Json
+  timeSpent      Int?
+  isCorrect      Boolean?
+  mistakeTags    String[]
+  createdAt      DateTime @default(now())
+  Question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  User           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@index([questionId])
   @@index([userId, createdAt(sort: Desc)])
 }
 
-// Chat history for the tutor conversations
 model ChatMessage {
-  id        String   @id @default(cuid())
+  id        String   @id
   userId    String
-  role      String   // "user" or "assistant"
+  role      String
   content   String
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model Question {
+  id             String         @id
+  year           Int
+  paper          Int
+  questionNumber Int
+  topic          String
+  topicId        String?
+  type           QuestionType   @default(STRUCTURED)
+  totalMarks     Int
+  questionText   String?
+  optionA        String?
+  optionB        String?
+  optionC        String?
+  optionD        String?
+  correctOption  String?
+  explanation    String?
+  images         Json?
+  difficulty     String?        @default("medium")
+  topics         String[]
+  syllabus       String         @default("9702")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  Attempt        Attempt[]
+  Topic          Topic?         @relation(fields: [topicId], references: [id])
+  QuestionPart   QuestionPart[]
+
+  @@index([difficulty])
+  @@index([topic])
+  @@index([type])
+  @@index([year, paper])
+}
+
+model QuestionPart {
+  id              String            @id
+  questionId      String
+  partLabel       String
+  partText        String
+  marks           Int
+  inputType       InputType         @default(TEXT)
+  images          Json?
+  markScheme      Json
+  order           Int
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime
+  Question        Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  QuestionSubPart QuestionSubPart[]
+
+  @@index([questionId])
+}
+
+model QuestionSubPart {
+  id           String       @id
+  partId       String
+  subPartLabel String
+  subPartText  String
+  marks        Int
+  inputType    InputType    @default(TEXT)
+  images       Json?
+  markScheme   Json
+  order        Int
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime
+  QuestionPart QuestionPart @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@index([partId])
+}
+
+model Topic {
+  id          String     @id
+  name        String     @unique
+  level       String
+  description String?
+  status      String     @default("not_started")
+  Question    Question[]
+}
+
+model User {
+  id        String    @id
+  clerkId   String    @unique
+  email     String    @unique
+  createdAt DateTime  @default(now())
+  Attempt   Attempt[]
+}
+
+enum InputType {
+  NUMERICAL
+  TEXT
+  LONG_TEXT
+  MCQ_INLINE
+}
+
+enum QuestionType {
+  MCQ
+  STRUCTURED
 }

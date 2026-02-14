@@ -4,6 +4,26 @@ import { PDFDocument } from 'pdf-lib'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
+// Helper for delay
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Helper for retry
+async function generateWithRetry(model: any, parts: any[], maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await model.generateContent(parts)
+    } catch (error: any) {
+      if ((error.status === 429 || error.message?.includes('429')) && i < maxRetries - 1) {
+        const delay = Math.pow(2, i) * 5000 + 5000 // 10s, 15s, 25s
+        console.log(`   ⚠️  Rate limit hit. Retrying in ${delay / 1000}s...`)
+        await wait(delay)
+      } else {
+        throw error
+      }
+    }
+  }
+}
+
 export interface ExtractedQuestion {
   questionNumber: string
   text: string
@@ -87,7 +107,7 @@ export async function extractQuestionsFromPDF(
       console.log(`   Processing chunk: Pages ${startPage + 1}-${endPage}`)
 
       // Add delay to avoid rate limits (Gemini free tier: 15 RPM)
-      if (i > 0) await new Promise((resolve) => setTimeout(resolve, 5000))
+      if (i > 0) await wait(10000)
 
       // Create chunk PDF
       const chunkPdf = await PDFDocument.create()
@@ -102,33 +122,45 @@ export async function extractQuestionsFromPDF(
         generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 },
       })
 
-      const result = await model.generateContent([
-        {
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: chunkBase64,
-          },
-        },
-        { text: EXTRACTION_PROMPT },
-      ])
+      let chunkQuestions: ExtractedQuestion[] = []
+      let parseSuccess = false
+      let retryCount = 0
 
-      const response = await result.response
-      const text = response.text()
+      while (!parseSuccess && retryCount < 2) {
+        try {
+          const result = await generateWithRetry(model, [
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: chunkBase64,
+              },
+            },
+            { text: EXTRACTION_PROMPT },
+          ])
 
-      // Clean response
-      let cleanedText = text.trim()
-      if (cleanedText.startsWith('```json')) {
-        cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
-      } else if (cleanedText.startsWith('```')) {
-        cleanedText = cleanedText.replace(/```\n?/g, '')
-      }
+          const response = await result.response
+          const text = response.text()
 
-      try {
-        const chunkQuestions: ExtractedQuestion[] = JSON.parse(cleanedText)
-        allQuestions.push(...chunkQuestions)
-        console.log(`   ✓ Extracted ${chunkQuestions.length} questions from chunk`)
-      } catch (e) {
-        console.error(`   ❌ Error parsing JSON for chunk ${startPage + 1}-${endPage}:`, e)
+          // Clean response
+          let cleanedText = text.trim()
+          if (cleanedText.startsWith('```json')) {
+            cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+          } else if (cleanedText.startsWith('```')) {
+            cleanedText = cleanedText.replace(/```\n?/g, '')
+          }
+
+          chunkQuestions = JSON.parse(cleanedText)
+          allQuestions.push(...chunkQuestions)
+          console.log(`   ✓ Extracted ${chunkQuestions.length} questions from chunk`)
+          parseSuccess = true
+        } catch (e) {
+          console.error(`   ❌ Error parsing JSON for chunk ${startPage + 1}-${endPage} (Attempt ${retryCount + 1}):`, e)
+          retryCount++
+          if (retryCount < 2) {
+            console.log('   🔄 Retrying generation for this chunk...')
+            await wait(5000)
+          }
+        }
       }
     }
 

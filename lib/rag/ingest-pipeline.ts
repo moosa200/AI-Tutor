@@ -177,6 +177,7 @@ export async function ingestPaper(paperFiles: PaperFiles) {
         )
       } else if (q.hasImage) {
         console.warn(`   ⚠️  Q${q.questionNumber} has image but missing bbox/page. Skipping crop.`)
+        console.warn(`       bbox: ${q.figureBoundingBox}, page: ${q.pageNumber}`)
       }
 
       if (action === 'create') {
