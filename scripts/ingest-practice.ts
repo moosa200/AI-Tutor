@@ -34,33 +34,37 @@ function discoverPapers(basePath: string): PaperFiles[] {
     .filter((f) => fs.statSync(path.join(basePath, f)).isDirectory())
 
   for (const yearStr of years) {
-    const year = parseInt(yearStr)
-    if (isNaN(year)) continue
-
     const yearPath = path.join(basePath, yearStr)
     const files = fs.readdirSync(yearPath)
 
-    // Group by paper number
+    // Group by year + paper number (extracted from filename)
     const paperGroups = new Map<
       string,
-      { qp?: string; ms?: string; paper: number }
+      { qp?: string; ms?: string; year: number; paper: number }
     >()
 
     for (const file of files) {
       if (!file.endsWith('.pdf')) continue
 
       // Parse: 9702_s24_qp_21.pdf or 9702_s24_ms_21.pdf
-      const match = file.match(/9702_[smw]\d{2}_(qp|ms)_(\d{1,2})\.pdf/)
+      // Format: 9702_[session][year]_[type]_[paper].pdf
+      const match = file.match(/9702_[smw](\d{2})_(qp|ms)_(\d{1,2})\.pdf/)
       if (!match) continue
 
-      const [, type, paperNumStr] = match
+      const [, yearSuffix, type, paperNumStr] = match
       const paperNum = parseInt(paperNumStr)
 
-      if (!paperGroups.has(paperNumStr)) {
-        paperGroups.set(paperNumStr, { paper: paperNum })
+      // Convert 2-digit year to 4-digit (24 -> 2024, 23 -> 2023)
+      const year = 2000 + parseInt(yearSuffix)
+
+      // Use year + paper as key to group QP and MS together
+      const groupKey = `${year}_${paperNumStr}`
+
+      if (!paperGroups.has(groupKey)) {
+        paperGroups.set(groupKey, { year, paper: paperNum })
       }
 
-      const group = paperGroups.get(paperNumStr)!
+      const group = paperGroups.get(groupKey)!
       if (type === 'qp') {
         group.qp = path.join(yearPath, file)
       } else if (type === 'ms') {
@@ -69,7 +73,7 @@ function discoverPapers(basePath: string): PaperFiles[] {
     }
 
     // Add complete paper sets
-    for (const [paperNumStr, group] of Array.from(paperGroups)) {
+    for (const [groupKey, group] of Array.from(paperGroups)) {
       if (group.qp && group.ms) {
         // Paper 1 = MCQ, Paper 2/4 = Structured
         const paperType =
@@ -78,7 +82,7 @@ function discoverPapers(basePath: string): PaperFiles[] {
             : 'STRUCTURED'
 
         papers.push({
-          year,
+          year: group.year,
           paper: group.paper,
           paperType,
           questionPaperPath: group.qp,
