@@ -79,6 +79,7 @@ interface LongTextInputProps {
   onChange: (value: string) => void
   marks: number
   disabled?: boolean
+  questionText?: string
 }
 
 export function LongTextInput({
@@ -87,19 +88,34 @@ export function LongTextInput({
   onChange,
   marks,
   disabled = false,
+  questionText = '',
 }: LongTextInputProps) {
   // Estimate rows based on marks (roughly 2-3 lines per mark)
   const rows = Math.max(3, Math.min(marks * 2, 12))
 
+  // Detect if this is a drawing question
+  const isDrawingQuestion = /\b(draw|sketch|plot)\b/i.test(questionText)
+  const placeholder = isDrawingQuestion
+    ? 'Describe the diagram you would draw (labels, components, values, connections, etc.)...'
+    : 'Enter your explanation...'
+
   return (
-    <Textarea
-      value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
-      rows={rows}
-      placeholder="Enter your explanation..."
-      disabled={disabled}
-      className="w-full ml-6 resize-y"
-    />
+    <div className="ml-6 space-y-2">
+      {isDrawingQuestion && (
+        <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
+          <strong>Note:</strong> For practice purposes, describe the diagram you would draw
+          (include all labels, components, values, and connections).
+        </div>
+      )}
+      <Textarea
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="w-full resize-y"
+      />
+    </div>
   )
 }
 

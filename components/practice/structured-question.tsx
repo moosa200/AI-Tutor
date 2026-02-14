@@ -199,7 +199,8 @@ export function StructuredQuestion({
                   answers[part.id],
                   (val) => handleAnswerChange(part.id, val),
                   isSubmitting,
-                  part.markScheme
+                  part.markScheme,
+                  part.partText
                 )}
               </div>
             )}
@@ -254,7 +255,8 @@ export function StructuredQuestion({
                       answers[subPart.id],
                       (val) => handleAnswerChange(subPart.id, val),
                       isSubmitting,
-                      subPart.markScheme
+                      subPart.markScheme,
+                      subPart.subPartText
                     )}
                   </div>
                 ))}
@@ -302,7 +304,8 @@ function renderInput(
   value: any,
   onChange: (val: any) => void,
   disabled: boolean,
-  markScheme?: any
+  markScheme?: any,
+  questionText?: string
 ) {
   switch (inputType) {
     case 'NUMERICAL':
@@ -322,6 +325,7 @@ function renderInput(
           onChange={onChange}
           marks={marks}
           disabled={disabled}
+          questionText={questionText}
         />
       )
     case 'MCQ_INLINE':

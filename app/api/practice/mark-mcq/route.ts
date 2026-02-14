@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
       correctOption: question.correctOption,
       explanation: question.explanation,
       selectedOption,
+      totalScore: score,
+      totalMarks: 1,
     })
   } catch (error) {
     console.error('MCQ marking error:', error)

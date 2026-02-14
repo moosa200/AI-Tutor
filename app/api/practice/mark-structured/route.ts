@@ -285,6 +285,12 @@ async function markTextAnswer(
     },
   })
 
+  // Detect if this is a drawing question
+  const isDrawingQuestion = /\b(draw|sketch|plot)\b/i.test(questionText)
+  const drawingNote = isDrawingQuestion
+    ? '\n\nIMPORTANT: This question asks students to DRAW a diagram, but the student provided a TEXT DESCRIPTION. Award marks if the description includes the key elements that should be in the diagram (labels, components, values, connections, etc.).'
+    : ''
+
   const prompt = `You are marking an A-Level Physics answer strictly according to the mark scheme.
 
 Question: ${questionText}
@@ -292,7 +298,7 @@ Question: ${questionText}
 Mark Scheme:
 ${JSON.stringify(scheme, null, 2)}
 
-Student Answer: ${answer}
+Student Answer: ${answer}${drawingNote}
 
 Mark this answer and return JSON in this EXACT format:
 {
