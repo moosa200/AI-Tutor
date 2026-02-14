@@ -329,7 +329,10 @@ export default function PracticePage() {
                 />
               ) : (
                 <StructuredQuestion
-                  question={currentQuestion}
+                  question={{
+                    ...currentQuestion,
+                    parts: currentQuestion.parts ?? [],
+                  }}
                   onSubmit={handleStructuredSubmit}
                   isSubmitting={isSubmitting}
                 />
