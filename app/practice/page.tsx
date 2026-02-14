@@ -316,7 +316,14 @@ export default function PracticePage() {
             <CardContent className="p-6">
               {currentQuestion.type === 'MCQ' ? (
                 <MCQQuestion
-                  question={currentQuestion}
+                  question={{
+                    ...currentQuestion,
+                    questionText: currentQuestion.questionText ?? '',
+                    optionA: currentQuestion.optionA ?? '',
+                    optionB: currentQuestion.optionB ?? '',
+                    optionC: currentQuestion.optionC ?? '',
+                    optionD: currentQuestion.optionD ?? '',
+                  }}
                   onSubmit={handleMCQSubmit}
                   isSubmitting={isSubmitting}
                 />
