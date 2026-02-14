@@ -1,20 +1,43 @@
 import { auth } from '@clerk/nextjs/server'
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { streamChatResponse } from '@/lib/gemini'
 import { searchQuestions, formatSearchResultsForPrompt } from '@/lib/rag/search'
+import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { validateMessages } from '@/lib/validation'
+import { sanitizeError, withTimeout } from '@/lib/error-handling'
 
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth()
 
     if (!userId) {
-      return new Response('Unauthorized', { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messages, useRAG = true } = await req.json()
+    // Rate limiting: 30 requests per minute per user
+    try {
+      rateLimit(userId, RATE_LIMITS.CHAT)
+    } catch (error) {
+      const sanitized = sanitizeError(error)
+      return NextResponse.json(
+        { error: sanitized.message },
+        { status: 429 }
+      )
+    }
 
-    if (!messages || !Array.isArray(messages)) {
-      return new Response('Invalid messages format', { status: 400 })
+    const body = await req.json()
+    const { messages: rawMessages, useRAG = true } = body
+
+    // Validate and sanitize messages
+    let messages
+    try {
+      messages = validateMessages(rawMessages)
+    } catch (error) {
+      const sanitized = sanitizeError(error)
+      return NextResponse.json(
+        { error: sanitized.message },
+        { status: 400 }
+      )
     }
 
     // Get the last user message for RAG search
@@ -23,8 +46,12 @@ export async function POST(req: NextRequest) {
 
     if (useRAG && lastUserMessage) {
       try {
-        // Search for relevant past paper questions
-        const results = await searchQuestions(lastUserMessage.content, 3)
+        // Search for relevant past paper questions with timeout
+        const results = await withTimeout(
+          searchQuestions(lastUserMessage.content, 3),
+          5000, // 5 second timeout
+          'RAG search timed out'
+        )
         context = formatSearchResultsForPrompt(results)
       } catch (error) {
         // RAG search failed, continue without context
@@ -47,7 +74,11 @@ export async function POST(req: NextRequest) {
           controller.close()
         } catch (error) {
           console.error('Stream error:', error)
-          controller.error(error)
+          const sanitized = sanitizeError(error)
+          controller.enqueue(
+            encoder.encode(`\n\n[Error: ${sanitized.message}]`)
+          )
+          controller.close()
         }
       },
     })
@@ -56,10 +87,16 @@ export async function POST(req: NextRequest) {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
+        'X-RateLimit-Limit': String(RATE_LIMITS.CHAT.maxRequests),
+        'X-RateLimit-Window': String(RATE_LIMITS.CHAT.windowMs),
       },
     })
   } catch (error) {
     console.error('Chat API error:', error)
-    return new Response('Internal server error', { status: 500 })
+    const sanitized = sanitizeError(error)
+    return NextResponse.json(
+      { error: sanitized.message },
+      { status: 500 }
+    )
   }
 }

@@ -2,6 +2,9 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { markAnswer } from '@/lib/gemini-marking'
+import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { validateStudentAnswer, validateQuestionId } from '@/lib/validation'
+import { sanitizeError, withRetry, withTimeout } from '@/lib/error-handling'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,40 +14,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { questionId, studentAnswer, question } = await req.json()
-
-    if (!studentAnswer || typeof studentAnswer !== 'string') {
-      return NextResponse.json({ error: 'Answer is required' }, { status: 400 })
+    // Rate limiting: 60 submissions per hour per user
+    try {
+      rateLimit(clerkId, RATE_LIMITS.PRACTICE)
+    } catch (error) {
+      const sanitized = sanitizeError(error)
+      return NextResponse.json(
+        { error: sanitized.message },
+        { status: 429 }
+      )
     }
 
-    // Get user from database
-    let user = await prisma.user.findUnique({
-      where: { clerkId },
+    const body = await req.json()
+    const { questionId: rawQuestionId, studentAnswer: rawAnswer, question } = body
+
+    // Validate student answer
+    let studentAnswer: string
+    try {
+      studentAnswer = validateStudentAnswer(rawAnswer)
+    } catch (error) {
+      const sanitized = sanitizeError(error)
+      return NextResponse.json(
+        { error: sanitized.message },
+        { status: 400 }
+      )
+    }
+
+    // Get or create user
+    const user = await withRetry(async () => {
+      let dbUser = await prisma.user.findUnique({
+        where: { clerkId },
+      })
+
+      if (!dbUser) {
+        dbUser = await prisma.user.create({
+          data: {
+            clerkId,
+            email: `${clerkId}@placeholder.com`,
+          },
+        })
+      }
+
+      return dbUser
     })
 
-    // Create user if doesn't exist
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          clerkId,
-          email: `${clerkId}@placeholder.com`, // Will be updated on first sign-in
-        },
-      })
-    }
-
-    // If questionId provided, get question from database
+    // Get question data
     let questionData = question
-    if (questionId && !question) {
-      const dbQuestion = await prisma.question.findUnique({
-        where: { id: questionId },
-      })
-      if (dbQuestion) {
-        questionData = {
-          text: dbQuestion.text,
-          markScheme: dbQuestion.markScheme,
-          marks: dbQuestion.marks,
-          examinerRemarks: dbQuestion.examinerRemarks,
+    if (rawQuestionId && !question) {
+      try {
+        const questionId = validateQuestionId(rawQuestionId)
+        const dbQuestion = await prisma.question.findUnique({
+          where: { id: questionId },
+        })
+        if (dbQuestion) {
+          questionData = {
+            text: dbQuestion.text,
+            markScheme: dbQuestion.markScheme,
+            marks: dbQuestion.marks,
+            examinerRemarks: dbQuestion.examinerRemarks,
+          }
         }
+      } catch (error) {
+        const sanitized = sanitizeError(error)
+        return NextResponse.json(
+          { error: sanitized.message },
+          { status: 400 }
+        )
       }
     }
 
@@ -52,22 +87,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 })
     }
 
-    // Mark the answer using Gemini
-    const result = await markAnswer(
-      questionData.text,
-      questionData.markScheme,
-      studentAnswer,
-      questionData.marks,
-      questionData.examinerRemarks
-    )
+    // Mark the answer with retry and timeout
+    const result = await withRetry(async () => {
+      return withTimeout(
+        markAnswer(
+          questionData.text,
+          questionData.markScheme,
+          studentAnswer,
+          questionData.marks,
+          questionData.examinerRemarks
+        ),
+        30000, // 30 second timeout for marking
+        'Marking timed out'
+      )
+    })
 
-    // Save attempt to database if we have a valid questionId
-    if (questionId) {
+    // Save attempt to database
+    if (rawQuestionId) {
       try {
         await prisma.attempt.create({
           data: {
             userId: user.id,
-            questionId,
+            questionId: rawQuestionId,
             studentAnswer,
             score: result.score,
             maxScore: result.maxScore,
@@ -87,8 +128,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error('Practice submit error:', error)
+    const sanitized = sanitizeError(error)
     return NextResponse.json(
-      { error: 'Failed to mark answer' },
+      { error: sanitized.message },
       { status: 500 }
     )
   }

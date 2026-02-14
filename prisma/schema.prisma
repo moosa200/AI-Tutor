@@ -43,6 +43,9 @@ model Question {
   attempts        Attempt[]
 
   @@unique([year, paper, questionNumber])
+  @@index([topic])
+  @@index([year])
+  @@index([difficulty])
 }
 
 model Attempt {
@@ -60,6 +63,7 @@ model Attempt {
 
   @@index([userId])
   @@index([questionId])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 // Chat history for the tutor conversations
