@@ -72,11 +72,12 @@ export function StructuredQuestion({
 
   // Check if all required fields are filled
   const allPartIds = question.parts.flatMap((part) => {
-    const ids = [part.id]
-    if (part.subParts) {
-      ids.push(...part.subParts.map((sp) => sp.id))
+    // If part has subparts, only count the subparts (not the parent)
+    if (part.subParts && part.subParts.length > 0) {
+      return part.subParts.map((sp) => sp.id)
     }
-    return ids
+    // Otherwise, count the part itself
+    return [part.id]
   })
 
   const isComplete = allPartIds.every(id => {
