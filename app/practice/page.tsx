@@ -33,7 +33,7 @@ interface QuestionPart {
   partLabel: string
   partText: string
   marks: number
-  inputType: string
+  inputType: 'NUMERICAL' | 'TEXT' | 'LONG_TEXT' | 'MCQ_INLINE'
   images: any
   markScheme: any
   options?: string[]
@@ -45,7 +45,7 @@ interface QuestionSubPart {
   subPartLabel: string
   subPartText: string
   marks: number
-  inputType: string
+  inputType: 'NUMERICAL' | 'TEXT' | 'LONG_TEXT' | 'MCQ_INLINE'
   images: any
   markScheme: any
   options?: string[]
