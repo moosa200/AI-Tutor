@@ -436,6 +436,31 @@ export default function PracticePage() {
                               {partResult.feedback}
                             </p>
                           )}
+                          {partResult.pointsAwarded?.length > 0 && (
+                            <div className="text-sm">
+                              <p className="font-medium text-green-700 mb-1">Points awarded:</p>
+                              <ul className="list-disc list-inside text-green-600 space-y-0.5">
+                                {partResult.pointsAwarded.map((p: string, i: number) => (
+                                  <li key={i}>{p}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {partResult.pointsMissed?.length > 0 && (
+                            <div className="text-sm">
+                              <p className="font-medium text-red-700 mb-1">Points missed:</p>
+                              <ul className="list-disc list-inside text-red-600 space-y-0.5">
+                                {partResult.pointsMissed.map((p: string, i: number) => (
+                                  <li key={i}>{p}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {partResult.suggestions && (
+                            <div className="text-sm bg-blue-50 border border-blue-200 rounded p-2 text-blue-700">
+                              <strong>Tip:</strong> {partResult.suggestions}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

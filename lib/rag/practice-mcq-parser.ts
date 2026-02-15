@@ -79,7 +79,7 @@ For EACH question, extract:
 2. questionText (the full question text, including any equations using LaTeX format)
 3. optionA, optionB, optionC, optionD (the four answer choices)
 4. correctOption (from mark scheme: 'A', 'B', 'C', or 'D')
-5. explanation (if provided in mark scheme, otherwise null)
+5. explanation (REQUIRED - briefly explain WHY the correct answer is right and why common wrong answers are incorrect, using physics concepts. Always provide this even if the mark scheme doesn't have one.)
 6. topic (classify as one of: Kinematics, Forces, Energy, Momentum, Circular Motion, Gravitation, Oscillations, Waves, Electricity, Magnetism, Nuclear Physics, Quantum Physics, or General)
 7. difficulty ('easy', 'medium', or 'hard' based on concept complexity)
 8. hasImage (true if the question references a diagram/figure/graph/table)

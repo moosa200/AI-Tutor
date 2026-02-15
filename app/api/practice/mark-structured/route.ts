@@ -90,10 +90,13 @@ export async function POST(req: NextRequest) {
         results.push({
           partId: part.id,
           partLabel: part.partLabel,
-          score: result.marks, // Frontend expects score
-          maxScore: part.marks, // Frontend expects maxScore
+          score: result.marks,
+          maxScore: part.marks,
           feedback: result.feedback,
           mistakeTags: result.mistakeTags,
+          pointsAwarded: result.pointsAwarded || [],
+          pointsMissed: result.pointsMissed || [],
+          suggestions: result.suggestions || '',
         })
 
         totalScore += result.marks
@@ -114,10 +117,13 @@ export async function POST(req: NextRequest) {
           results.push({
             subPartId: subPart.id,
             partLabel: `${part.partLabel}(${subPart.subPartLabel})`,
-            score: result.marks, // Frontend expects score
-            maxScore: subPart.marks, // Frontend expects maxScore
+            score: result.marks,
+            maxScore: subPart.marks,
             feedback: result.feedback,
             mistakeTags: result.mistakeTags,
+            pointsAwarded: result.pointsAwarded || [],
+            pointsMissed: result.pointsMissed || [],
+            suggestions: result.suggestions || '',
           })
 
           totalScore += result.marks

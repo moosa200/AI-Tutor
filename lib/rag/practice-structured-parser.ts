@@ -124,7 +124,8 @@ For EACH part:
      "unit": "<unit>",
      "tolerance": <number or percentage string like "2%">,
      "alternativeUnits": ["alt1", "alt2"],
-     "maxMarks": <marks>
+     "maxMarks": <marks>,
+     "explanation": "<REQUIRED: brief step-by-step working showing how to arrive at the answer>"
    }
 
    For TEXT/LONG_TEXT:
@@ -132,6 +133,7 @@ For EACH part:
      "type": "text",
      "maxMarks": <marks>,
      "keywords": ["keyword1", "keyword2"],
+     "explanation": "<REQUIRED: brief model answer or explanation of the key physics concepts expected>",
      "requiredPoints": [
        {
          "point": "description of point",
@@ -146,7 +148,7 @@ For EACH part:
      "type": "mcq",
      "options": ["option1", "option2", "option3", "option4"],
      "correctOption": "A",
-     "explanation": "..."
+     "explanation": "<REQUIRED: brief explanation of why the correct option is right>"
    }
 
 9. subParts (ONLY if the part has subparts like (i), (ii), (iii))
