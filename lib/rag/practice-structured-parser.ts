@@ -166,6 +166,15 @@ IMPORTANT:
 - NEVER use 'undefined' or 'null' for required string fields
 - For subparts, ALWAYS provide subPartLabel ('i', 'ii', 'iii') and subPartText
 
+CRITICAL - IMAGE MATCHING RULES:
+- ONLY set hasImage=true if the question/part/subpart contains or directly references a PHYSICS diagram, graph, table, circuit, or figure
+- NEVER treat barcodes, page headers, footers, candidate numbers, or exam paper metadata as images
+- The imageBoundingBox MUST tightly wrap ONLY the relevant diagram/graph/table for THAT SPECIFIC question/part
+- If multiple questions appear on the same page, each should only get its OWN image, not another question's image
+- VERIFY the image content matches what the question text describes
+- When in doubt, set hasImage=false rather than providing a wrong or irrelevant bounding box
+- Common false positives to IGNORE: barcodes, dotted answer lines, blank spaces, page numbers, exam headers
+
 FORMATTING RULES:
 - Use LaTeX: $F = ma$, $\\frac{1}{2}mv^2$, $E = mc^2$
 - Units: $v = 20 \\text{ m s}^{-1}$
@@ -320,6 +329,44 @@ Parse ALL questions from this chunk of the paper.`
   }))
 
         chunkQuestions = questions
+
+        // Convert chunk-relative page numbers to absolute and validate bounding boxes
+        for (const q of chunkQuestions) {
+          if (q.pageNumber) q.pageNumber += startPage
+          if (q.hasImage && q.imageBoundingBox) {
+            const [ymin, xmin, ymax, xmax] = q.imageBoundingBox
+            if (!(ymin >= 0 && xmin >= 0 && ymax <= 1000 && xmax <= 1000 &&
+                  ymax > ymin && xmax > xmin &&
+                  (ymax - ymin) >= 20 && (xmax - xmin) >= 20)) {
+              q.hasImage = false; q.imageBoundingBox = undefined; q.pageNumber = undefined
+            }
+          }
+          for (const part of q.parts) {
+            if (part.pageNumber) part.pageNumber += startPage
+            if (part.hasImage && part.imageBoundingBox) {
+              const [ymin, xmin, ymax, xmax] = part.imageBoundingBox
+              if (!(ymin >= 0 && xmin >= 0 && ymax <= 1000 && xmax <= 1000 &&
+                    ymax > ymin && xmax > xmin &&
+                    (ymax - ymin) >= 20 && (xmax - xmin) >= 20)) {
+                part.hasImage = false; part.imageBoundingBox = undefined; part.pageNumber = undefined
+              }
+            }
+            if (part.subParts) {
+              for (const sp of part.subParts) {
+                if (sp.pageNumber) sp.pageNumber += startPage
+                if (sp.hasImage && sp.imageBoundingBox) {
+                  const [ymin, xmin, ymax, xmax] = sp.imageBoundingBox
+                  if (!(ymin >= 0 && xmin >= 0 && ymax <= 1000 && xmax <= 1000 &&
+                        ymax > ymin && xmax > xmin &&
+                        (ymax - ymin) >= 20 && (xmax - xmin) >= 20)) {
+                    sp.hasImage = false; sp.imageBoundingBox = undefined; sp.pageNumber = undefined
+                  }
+                }
+              }
+            }
+          }
+        }
+
         allQuestions.push(...chunkQuestions)
         console.log(`   ✓ Extracted ${chunkQuestions.length} questions from chunk`)
         parseSuccess = true

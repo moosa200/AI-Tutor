@@ -172,7 +172,23 @@ Extract ALL questions from this chunk of the paper.`
           throw new Error('Invalid response format: missing questions array')
         }
 
-        chunkQuestions = parsed.questions
+        // Convert chunk-relative page numbers to absolute and validate bounding boxes
+        chunkQuestions = parsed.questions.map((q: MCQQuestion) => {
+          if (q.pageNumber) q.pageNumber += startPage
+          if (q.hasImage && q.imageBoundingBox) {
+            const [ymin, xmin, ymax, xmax] = q.imageBoundingBox
+            const valid = ymin >= 0 && xmin >= 0 && ymax <= 1000 && xmax <= 1000 &&
+              ymax > ymin && xmax > xmin &&
+              (ymax - ymin) >= 20 && (xmax - xmin) >= 20
+            if (!valid) {
+              console.warn(`   ⚠️  Invalid bounding box for Q${q.questionNumber}, skipping image`)
+              q.hasImage = false
+              q.imageBoundingBox = undefined
+              q.pageNumber = undefined
+            }
+          }
+          return q
+        })
         allQuestions.push(...chunkQuestions)
         console.log(`   ✓ Extracted ${chunkQuestions.length} questions from chunk`)
         parseSuccess = true
