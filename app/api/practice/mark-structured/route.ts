@@ -7,6 +7,14 @@ import { sanitizeError, withRetry, withTimeout } from '@/lib/error-handling'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
+function extractFeedbackExtras(result: Record<string, unknown>) {
+  return {
+    pointsAwarded: Array.isArray(result.pointsAwarded) ? result.pointsAwarded as string[] : [],
+    pointsMissed: Array.isArray(result.pointsMissed) ? result.pointsMissed as string[] : [],
+    suggestions: typeof result.suggestions === 'string' ? result.suggestions : '',
+  }
+}
+
 interface MarkScheme {
   type: 'numerical' | 'keywords' | 'rubric'
 
@@ -94,9 +102,7 @@ export async function POST(req: NextRequest) {
           maxScore: part.marks,
           feedback: result.feedback,
           mistakeTags: result.mistakeTags,
-          pointsAwarded: result.pointsAwarded || [],
-          pointsMissed: result.pointsMissed || [],
-          suggestions: result.suggestions || '',
+          ...extractFeedbackExtras(result),
         })
 
         totalScore += result.marks
@@ -121,9 +127,7 @@ export async function POST(req: NextRequest) {
             maxScore: subPart.marks,
             feedback: result.feedback,
             mistakeTags: result.mistakeTags,
-            pointsAwarded: result.pointsAwarded || [],
-            pointsMissed: result.pointsMissed || [],
-            suggestions: result.suggestions || '',
+            ...extractFeedbackExtras(result),
           })
 
           totalScore += result.marks
