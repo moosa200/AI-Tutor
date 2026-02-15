@@ -96,10 +96,11 @@ export async function cropAndSaveImage(
     // Convert Gemini's 0-1000 scale to pixel coordinates
     const [ymin, xmin, ymax, xmax] = boundingBox
 
-    // Add 2% padding to avoid cutting off edges
-    const PADDING_PERCENT = 2
-    const xPadding = Math.round(((xmax - xmin) * PADDING_PERCENT) / 100)
-    const yPadding = Math.round(((ymax - ymin) * PADDING_PERCENT) / 100)
+    // Add padding to avoid cutting off edges
+    const PADDING_PERCENT = 8
+    const MIN_PADDING_PX = 40
+    const xPadding = Math.max(Math.round(((xmax - xmin) / 1000) * width * PADDING_PERCENT / 100), MIN_PADDING_PX)
+    const yPadding = Math.max(Math.round(((ymax - ymin) / 1000) * height * PADDING_PERCENT / 100), MIN_PADDING_PX)
 
     // Calculate crop dimensions with padding
     let left = Math.max(0, Math.round((xmin / 1000) * width) - xPadding)
