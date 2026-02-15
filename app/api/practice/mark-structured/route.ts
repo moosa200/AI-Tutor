@@ -184,6 +184,19 @@ async function markAnswer(
   questionText: string,
   inputType: string
 ) {
+  // Handle diagram/drawing parts that were skipped
+  if (answer === '__DIAGRAM_SKIPPED__' || (!answer && /(draw|sketch|label|shade|plot|graph|annotat|on\s+fig|on\s+diagram|in\s+fig)/i.test(questionText))) {
+    return {
+      marks: 0,
+      maxMarks: scheme.maxMarks,
+      feedback: 'Drawing/diagram required; not supported in online practice.',
+      mistakeTags: [],
+      pointsAwarded: [],
+      pointsMissed: [],
+      suggestions: '',
+    }
+  }
+
   if (inputType === 'NUMERICAL') {
     return markNumericalAnswer(answer, scheme)
   } else {
@@ -201,6 +214,9 @@ function markNumericalAnswer(
       maxMarks: scheme.maxMarks,
       feedback: 'No answer provided',
       mistakeTags: ['incomplete'],
+      pointsAwarded: [],
+      pointsMissed: [],
+      suggestions: '',
     }
   }
 
@@ -213,6 +229,9 @@ function markNumericalAnswer(
       maxMarks: scheme.maxMarks,
       feedback: 'Invalid number format',
       mistakeTags: ['format_error'],
+      pointsAwarded: [],
+      pointsMissed: [],
+      suggestions: '',
     }
   }
 
@@ -270,6 +289,9 @@ function markNumericalAnswer(
     feedback: feedback.join('\n'),
     isCorrect: marks === scheme.maxMarks,
     mistakeTags,
+    pointsAwarded: isValueCorrect ? [`Correct value: ${studentValue}`] : [],
+    pointsMissed: !isValueCorrect ? [`Expected value: ${correctValue}`] : [],
+    suggestions: !isValueCorrect ? `Check your working: the expected answer is ${correctValue} ${scheme.unit || ''}`.trim() : '',
   }
 }
 
@@ -284,12 +306,15 @@ async function markTextAnswer(
       maxMarks: scheme.maxMarks,
       feedback: 'No answer provided',
       mistakeTags: ['incomplete'],
+      pointsAwarded: [],
+      pointsMissed: [],
+      suggestions: '',
     }
   }
 
   // Use Gemini for intelligent marking
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.0-flash',
     generationConfig: {
       responseMimeType: 'application/json',
     },
@@ -351,8 +376,11 @@ MARKING RULES:
     return {
       marks: 0,
       maxMarks: scheme.maxMarks,
-      feedback: 'Error processing answer. Please try again.',
-      mistakeTags: ['marking_error'],
+      feedback: 'Unable to mark answer automatically.',
+      mistakeTags: [],
+      pointsAwarded: [],
+      pointsMissed: [],
+      suggestions: '',
     }
   }
 }

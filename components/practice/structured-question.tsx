@@ -11,7 +11,10 @@ import {
 } from './input-components'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Send } from 'lucide-react'
+import { Send, PenTool } from 'lucide-react'
+
+const isDiagramAction = (text: string) =>
+  /(draw|sketch|label|shade|plot|graph|annotat|on\s+fig|on\s+diagram|in\s+fig)/i.test(text)
 
 interface QuestionImage {
   url: string
@@ -61,9 +64,15 @@ export function StructuredQuestion({
   isSubmitting = false,
 }: StructuredQuestionProps) {
   const [answers, setAnswers] = useState<Record<string, any>>({})
+  const [skippedParts, setSkippedParts] = useState<Set<string>>(new Set())
 
   const handleAnswerChange = (id: string, value: any) => {
     setAnswers((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const handleSkipPart = (id: string) => {
+    setSkippedParts((prev) => new Set(prev).add(id))
+    setAnswers((prev) => ({ ...prev, [id]: '__DIAGRAM_SKIPPED__' }))
   }
 
   const handleSubmit = () => {
@@ -81,6 +90,7 @@ export function StructuredQuestion({
   })
 
   const isComplete = allPartIds.every(id => {
+    if (skippedParts.has(id)) return true
     const answer = answers[id]
     if (!answer) return false
     if (typeof answer === 'object' && 'number' in answer) {
@@ -192,15 +202,36 @@ export function StructuredQuestion({
             {/* Input Field for Part (if no subparts) */}
             {(!part.subParts || part.subParts.length === 0) && (
               <div>
-                {renderInput(
-                  part.id,
-                  part.inputType,
-                  part.marks,
-                  answers[part.id],
-                  (val) => handleAnswerChange(part.id, val),
-                  isSubmitting,
-                  part.markScheme,
-                  part.partText
+                {isDiagramAction(part.partText) ? (
+                  <div className="ml-6 space-y-2">
+                    <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted border rounded p-3">
+                      <PenTool className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span>This part requires drawing/shading on the diagram, which isn&apos;t supported yet.</span>
+                    </div>
+                    {!skippedParts.has(part.id) ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-6"
+                        onClick={() => handleSkipPart(part.id)}
+                      >
+                        Skip this part
+                      </Button>
+                    ) : (
+                      <p className="ml-6 text-xs text-muted-foreground">Skipped</p>
+                    )}
+                  </div>
+                ) : (
+                  renderInput(
+                    part.id,
+                    part.inputType,
+                    part.marks,
+                    answers[part.id],
+                    (val) => handleAnswerChange(part.id, val),
+                    isSubmitting,
+                    part.markScheme,
+                    part.partText
+                  )
                 )}
               </div>
             )}
@@ -248,15 +279,36 @@ export function StructuredQuestion({
                     )}
 
                     {/* Subpart Input */}
-                    {renderInput(
-                      subPart.id,
-                      subPart.inputType,
-                      subPart.marks,
-                      answers[subPart.id],
-                      (val) => handleAnswerChange(subPart.id, val),
-                      isSubmitting,
-                      subPart.markScheme,
-                      subPart.subPartText
+                    {isDiagramAction(subPart.subPartText) ? (
+                      <div className="ml-6 space-y-2">
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted border rounded p-3">
+                          <PenTool className="h-4 w-4 mt-0.5 shrink-0" />
+                          <span>This part requires drawing/shading on the diagram, which isn&apos;t supported yet.</span>
+                        </div>
+                        {!skippedParts.has(subPart.id) ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="ml-6"
+                            onClick={() => handleSkipPart(subPart.id)}
+                          >
+                            Skip this part
+                          </Button>
+                        ) : (
+                          <p className="ml-6 text-xs text-muted-foreground">Skipped</p>
+                        )}
+                      </div>
+                    ) : (
+                      renderInput(
+                        subPart.id,
+                        subPart.inputType,
+                        subPart.marks,
+                        answers[subPart.id],
+                        (val) => handleAnswerChange(subPart.id, val),
+                        isSubmitting,
+                        subPart.markScheme,
+                        subPart.subPartText
+                      )
                     )}
                   </div>
                 ))}
