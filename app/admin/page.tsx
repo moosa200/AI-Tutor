@@ -136,6 +136,69 @@ async function getScoresByTopic() {
     .sort((a, b) => a.avgPercent - b.avgPercent)
 }
 
+async function getAllUsers() {
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      imageUrl: true,
+      role: true,
+      lastActiveAt: true,
+      createdAt: true,
+      _count: { select: { attempts: true, events: true } },
+    },
+  })
+
+  // Get per-user attempt stats
+  const userStats = await Promise.all(
+    users.map(async (u) => {
+      const attempts = await prisma.attempt.findMany({
+        where: { userId: u.id },
+        select: {
+          score: true,
+          maxScore: true,
+          question: { select: { topic: true } },
+        },
+      })
+
+      const totalScore = attempts.reduce((s, a) => s + a.score, 0)
+      const totalMax = attempts.reduce((s, a) => s + a.maxScore, 0)
+      const avgPercent = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : null
+
+      // Find weakest topic
+      const topicScores: Record<string, { total: number; max: number }> = {}
+      for (const a of attempts) {
+        const topic = a.question?.topic || 'Unknown'
+        if (!topicScores[topic]) topicScores[topic] = { total: 0, max: 0 }
+        topicScores[topic].total += a.score
+        topicScores[topic].max += a.maxScore
+      }
+
+      let weakestTopic: string | null = null
+      let weakestPct = 101
+      for (const [topic, s] of Object.entries(topicScores)) {
+        const pct = s.max > 0 ? (s.total / s.max) * 100 : 0
+        if (pct < weakestPct) {
+          weakestPct = pct
+          weakestTopic = topic
+        }
+      }
+
+      return {
+        ...u,
+        attempts: u._count.attempts,
+        events: u._count.events,
+        avgPercent,
+        weakestTopic,
+      }
+    })
+  )
+
+  return userStats
+}
+
 async function getSignupTrend() {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
@@ -155,13 +218,14 @@ async function getSignupTrend() {
 }
 
 export default async function AdminPage() {
-  const [overview, featureUsage, activeUsers, topicScores, signupTrend] =
+  const [overview, featureUsage, activeUsers, topicScores, signupTrend, allUsers] =
     await Promise.all([
       getOverviewStats(),
       getFeatureUsage(),
       getMostActiveUsers(),
       getScoresByTopic(),
       getSignupTrend(),
+      getAllUsers(),
     ])
 
   return (
@@ -358,6 +422,79 @@ export default async function AdminPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* All Users Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>All Users</CardTitle>
+            <CardDescription>
+              Per-user details with attempts, avg score, and weakest topic
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-3 font-medium">User</th>
+                    <th className="pb-3 font-medium">Joined</th>
+                    <th className="pb-3 font-medium">Last Active</th>
+                    <th className="pb-3 font-medium text-center">Attempts</th>
+                    <th className="pb-3 font-medium text-center">Events</th>
+                    <th className="pb-3 font-medium text-center">Avg Score</th>
+                    <th className="pb-3 font-medium">Weakest Topic</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allUsers.map((u) => (
+                    <tr key={u.id} className="border-b last:border-0">
+                      <td className="py-3">
+                        <div>
+                          <p className="font-medium">
+                            {u.name || 'No name'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {u.email}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="py-3 text-muted-foreground">
+                        {new Date(u.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 text-muted-foreground">
+                        {u.lastActiveAt
+                          ? new Date(u.lastActiveAt).toLocaleDateString()
+                          : 'Never'}
+                      </td>
+                      <td className="py-3 text-center">{u.attempts}</td>
+                      <td className="py-3 text-center">{u.events}</td>
+                      <td className="py-3 text-center">
+                        {u.avgPercent !== null ? (
+                          <Badge
+                            variant={
+                              u.avgPercent >= 60 ? 'secondary' : 'destructive'
+                            }
+                          >
+                            {u.avgPercent}%
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        {u.weakestTopic ? (
+                          <Badge variant="outline">{u.weakestTopic}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   )
