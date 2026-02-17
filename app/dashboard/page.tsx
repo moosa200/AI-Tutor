@@ -16,7 +16,13 @@ import {
   ArrowRight,
   Clock,
   AlertTriangle,
+  Shield,
 } from 'lucide-react'
+
+const ADMIN_IDS = (process.env.ADMIN_CLERK_IDS ?? '')
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean)
 
 // Topics for A Level Physics 9702
 const TOPICS = [
@@ -130,6 +136,14 @@ export default async function DashboardPage() {
                   Practice
                 </Button>
               </Link>
+              {ADMIN_IDS.includes(clerkId) && (
+                <Link href="/admin">
+                  <Button variant="ghost" size="sm">
+                    <Shield className="mr-2 h-4 w-4" />
+                    Admin
+                  </Button>
+                </Link>
+              )}
             </nav>
             <UserButton afterSignOutUrl="/" />
           </div>
