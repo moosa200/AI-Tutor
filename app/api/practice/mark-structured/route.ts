@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Log practice event
-    logEvent(user.id, 'practice_submit', {
+    await logEvent(user.id, 'practice_submit', {
       questionId,
       type: 'STRUCTURED',
       score: totalScore,

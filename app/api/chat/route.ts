@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     // Log chat event
     const user = await getOrCreateUser(userId)
-    logEvent(user.id, 'chat_message')
+    await logEvent(user.id, 'chat_message')
 
     // Get the last user message for RAG search
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')

@@ -1,24 +1,26 @@
 import { prisma } from '@/lib/db'
 
 /**
- * Log an event (fire-and-forget — does not block the caller).
+ * Log an event. Awaited to avoid dangling connections on serverless.
  */
-export function logEvent(
+export async function logEvent(
   userId: string,
   type: string,
   metadata?: Record<string, any>
 ) {
-  prisma.event
-    .create({
+  try {
+    await prisma.event.create({
       data: { userId, type, metadata: metadata ?? undefined },
     })
-    .catch((err) => console.error('Event logging failed:', err))
+  } catch (err) {
+    console.error('Event logging failed:', err)
+  }
 }
 
 /**
  * Get or create a user by Clerk ID.
  * Replaces the duplicated find-or-create pattern across API routes.
- * Also updates lastActiveAt in the background.
+ * Also updates lastActiveAt.
  */
 export async function getOrCreateUser(clerkId: string) {
   let user = await prisma.user.findUnique({ where: { clerkId } })
@@ -32,13 +34,15 @@ export async function getOrCreateUser(clerkId: string) {
     })
   }
 
-  // Update lastActiveAt (fire-and-forget)
-  prisma.user
-    .update({
+  // Update lastActiveAt - awaited to avoid dangling connections on serverless
+  try {
+    await prisma.user.update({
       where: { id: user.id },
       data: { lastActiveAt: new Date() },
     })
-    .catch(() => {})
+  } catch {
+    // Non-critical, don't crash
+  }
 
   return user
 }
