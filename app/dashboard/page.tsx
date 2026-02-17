@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
+import { getOrCreateUser } from '@/lib/events'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -100,18 +101,7 @@ export default async function DashboardPage() {
   }
 
   // Get or create user
-  let user = await prisma.user.findUnique({
-    where: { clerkId },
-  })
-
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        clerkId,
-        email: `${clerkId}@placeholder.com`,
-      },
-    })
-  }
+  const user = await getOrCreateUser(clerkId)
 
   const recentAttempts = await getRecentAttempts(user.id)
   const topicStats = await getTopicStats(user.id)

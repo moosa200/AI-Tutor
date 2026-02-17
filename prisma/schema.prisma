@@ -115,11 +115,31 @@ model Topic {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  clerkId   String    @unique
-  email     String    @unique
-  createdAt DateTime  @default(now())
-  attempts  Attempt[]
+  id           String    @id @default(cuid())
+  clerkId      String    @unique
+  email        String    @unique
+  name         String?
+  imageUrl     String?
+  role         String    @default("student")
+  lastActiveAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+  attempts     Attempt[]
+  events       Event[]
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([userId, type])
 }
 
 enum InputType {

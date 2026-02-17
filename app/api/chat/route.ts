@@ -5,6 +5,7 @@ import { searchQuestions, formatSearchResultsForPrompt } from '@/lib/rag/search'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { validateMessages } from '@/lib/validation'
 import { sanitizeError, withTimeout } from '@/lib/error-handling'
+import { getOrCreateUser, logEvent } from '@/lib/events'
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,6 +40,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Log chat event
+    const user = await getOrCreateUser(userId)
+    logEvent(user.id, 'chat_message')
 
     // Get the last user message for RAG search
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')

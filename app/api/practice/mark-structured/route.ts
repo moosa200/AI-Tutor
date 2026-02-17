@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { sanitizeError, withRetry, withTimeout } from '@/lib/error-handling'
+import { getOrCreateUser, logEvent } from '@/lib/events'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -137,18 +138,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get or create user
-    let user = await prisma.user.findUnique({
-      where: { clerkId },
-    })
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          clerkId,
-          email: `${clerkId}@placeholder.com`,
-        },
-      })
-    }
+    const user = await getOrCreateUser(clerkId)
 
     // Save attempt
     await prisma.attempt.create({
@@ -162,6 +152,14 @@ export async function POST(req: NextRequest) {
         isCorrect: totalScore === totalMaxScore,
         mistakeTags: results.flatMap((r) => r.mistakeTags || []),
       },
+    })
+
+    // Log practice event
+    logEvent(user.id, 'practice_submit', {
+      questionId,
+      type: 'STRUCTURED',
+      score: totalScore,
+      maxScore: totalMaxScore,
     })
 
     return NextResponse.json({

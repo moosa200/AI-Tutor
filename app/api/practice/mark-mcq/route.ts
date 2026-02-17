@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { sanitizeError } from '@/lib/error-handling'
+import { getOrCreateUser, logEvent } from '@/lib/events'
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,18 +49,7 @@ export async function POST(req: NextRequest) {
     const score = isCorrect ? 1 : 0
 
     // Get or create user
-    let user = await prisma.user.findUnique({
-      where: { clerkId },
-    })
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          clerkId,
-          email: `${clerkId}@placeholder.com`,
-        },
-      })
-    }
+    const user = await getOrCreateUser(clerkId)
 
     // Save attempt
     await prisma.attempt.create({
@@ -78,6 +68,14 @@ export async function POST(req: NextRequest) {
         isCorrect,
         mistakeTags: isCorrect ? [] : ['wrong_option'],
       },
+    })
+
+    // Log practice event
+    logEvent(user.id, 'practice_submit', {
+      questionId,
+      type: 'MCQ',
+      score,
+      isCorrect,
     })
 
     return NextResponse.json({
