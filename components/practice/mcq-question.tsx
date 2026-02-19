@@ -102,7 +102,8 @@ export function MCQQuestion({
                 alt={img.caption || 'Diagram'}
                 width={500}
                 height={300}
-                className="rounded border max-w-full h-auto"
+                className="rounded border"
+                style={{ maxWidth: '100%', height: 'auto' }}
               />
               {img.caption && (
                 <p className="text-sm text-muted-foreground mt-2 text-center">

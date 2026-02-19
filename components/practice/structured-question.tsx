@@ -145,7 +145,8 @@ export function StructuredQuestion({
                 alt={img.caption || `Diagram ${i + 1}`}
                 width={600}
                 height={400}
-                className="rounded-lg border max-w-full h-auto"
+                className="rounded-lg border"
+                style={{ maxWidth: '100%', height: 'auto' }}
               />
               {img.caption && (
                 <p className="text-sm text-muted-foreground mt-2 text-center">
@@ -187,7 +188,8 @@ export function StructuredQuestion({
                       alt={img.caption || 'Diagram'}
                       width={500}
                       height={300}
-                      className="rounded border max-w-full h-auto"
+                      className="rounded border"
+                      style={{ maxWidth: '100%', height: 'auto' }}
                     />
                     {img.caption && (
                       <p className="text-sm text-muted-foreground mt-1">
@@ -266,7 +268,8 @@ export function StructuredQuestion({
                               alt={img.caption || 'Diagram'}
                               width={400}
                               height={250}
-                              className="rounded border max-w-full h-auto"
+                              className="rounded border"
+                              style={{ maxWidth: '100%', height: 'auto' }}
                             />
                             {img.caption && (
                               <p className="text-xs text-muted-foreground mt-1">
