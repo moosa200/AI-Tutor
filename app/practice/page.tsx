@@ -312,8 +312,8 @@ export default function PracticePage() {
 
         {/* Question Display */}
         {!isLoading && currentQuestion && !result && (
-          <Card>
-            <CardContent className="p-6">
+          <Card className="overflow-hidden">
+            <CardContent className="p-6 overflow-x-auto">
               {currentQuestion.type === 'MCQ' ? (
                 <MCQQuestion
                   question={{

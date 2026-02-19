@@ -52,7 +52,7 @@ export function MCQQuestion({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Question Header */}
       <div className="border-b pb-4">
         <div className="flex items-center justify-between">

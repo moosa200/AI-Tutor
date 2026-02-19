@@ -100,7 +100,7 @@ export function StructuredQuestion({
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Question Header */}
       <div className="border-b pb-4">
         <div className="flex items-center justify-between">
@@ -167,8 +167,8 @@ export function StructuredQuestion({
             {/* Part Header */}
             <div className="flex items-start gap-2">
               <span className="font-bold text-lg">({part.partLabel})</span>
-              <div className="flex-1">
-                <div className="text-base leading-relaxed">
+              <div className="flex-1 min-w-0">
+                <div className="text-base leading-relaxed break-words">
                   {parseMathText(part.partText)}
                 </div>
                 <span className="text-sm text-muted-foreground">
@@ -245,8 +245,8 @@ export function StructuredQuestion({
                       <span className="font-semibold">
                         ({subPart.subPartLabel})
                       </span>
-                      <div className="flex-1">
-                        <div className="text-sm leading-relaxed">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm leading-relaxed break-words">
                           {parseMathText(subPart.subPartText)}
                         </div>
                         <span className="text-xs text-muted-foreground">
