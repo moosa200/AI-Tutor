@@ -139,7 +139,7 @@ export function StructuredQuestion({
       {question.images && question.images.length > 0 && (
         <div className="space-y-4">
           {question.images.map((img, i) => (
-            <div key={i} className="flex flex-col items-center">
+            <div key={i} className="w-full">
               <Image
                 src={img.url}
                 alt={img.caption || `Diagram ${i + 1}`}
@@ -149,7 +149,7 @@ export function StructuredQuestion({
                 style={{ maxWidth: '100%', height: 'auto' }}
               />
               {img.caption && (
-                <p className="text-sm text-muted-foreground mt-2 text-center">
+                <p className="text-sm text-muted-foreground mt-2">
                   {img.caption}
                 </p>
               )}
