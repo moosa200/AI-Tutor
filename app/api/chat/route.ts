@@ -65,8 +65,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Remove error messages and empty assistant messages from history
+    // before passing to Gemini to avoid invalid conversation state
+    const cleanMessages = messages.filter(m => {
+      if (!m.content.trim()) return false
+      if (m.role === 'assistant' && m.content.trimStart().startsWith('[Error:')) return false
+      return true
+    })
+
     // Stream response from Gemini
-    const stream = streamChatResponse(messages, context || undefined)
+    const stream = streamChatResponse(cleanMessages, context || undefined)
 
     // Convert async generator to ReadableStream, collecting full response for persistence
     const encoder = new TextEncoder()
@@ -87,12 +95,21 @@ export async function POST(req: NextRequest) {
               (err) => console.error('Message persistence error:', err)
             )
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Stream error:', error)
-          const sanitized = sanitizeError(error)
-          controller.enqueue(
-            encoder.encode(`\n\n[Error: ${sanitized.message}]`)
-          )
+          // Surface meaningful Gemini error messages instead of generic fallback
+          const msg: string = error?.message ?? ''
+          let clientMessage = 'An unexpected error occurred. Please try again.'
+          if (msg.includes('429') || msg.toLowerCase().includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+            clientMessage = 'AI rate limit reached. Please wait a moment and try again.'
+          } else if (msg.includes('SAFETY')) {
+            clientMessage = 'Response blocked by safety filter. Try rephrasing your question.'
+          } else if (error?.code === 'TIMEOUT' || msg.includes('timed out')) {
+            clientMessage = 'Request timed out. Please try again.'
+          } else if (error instanceof Error && error.message) {
+            clientMessage = error.message
+          }
+          controller.enqueue(encoder.encode(`\n\n[Error: ${clientMessage}]`))
           controller.close()
         }
       },
