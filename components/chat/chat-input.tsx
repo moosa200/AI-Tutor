@@ -45,7 +45,6 @@ export function ChatInput({ onSend, isLoading, placeholder = 'Ask a physics ques
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={isLoading}
         className="min-h-[44px] max-h-[200px] resize-none"
         rows={1}
       />
