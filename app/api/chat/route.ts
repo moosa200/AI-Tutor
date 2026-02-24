@@ -6,6 +6,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { validateMessages } from '@/lib/validation'
 import { sanitizeError, withTimeout } from '@/lib/error-handling'
 import { getOrCreateUser, logEvent } from '@/lib/events'
+import { prisma } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { messages: rawMessages, useRAG = true } = body
+    const { messages: rawMessages, useRAG = true, sessionId } = body
 
     // Validate and sanitize messages
     let messages
@@ -67,16 +68,25 @@ export async function POST(req: NextRequest) {
     // Stream response from Gemini
     const stream = streamChatResponse(messages, context || undefined)
 
-    // Convert async generator to ReadableStream
+    // Convert async generator to ReadableStream, collecting full response for persistence
     const encoder = new TextEncoder()
+    let fullAssistantContent = ''
 
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
           for await (const text of stream) {
+            fullAssistantContent += text
             controller.enqueue(encoder.encode(text))
           }
           controller.close()
+
+          // Persist messages to DB after streaming completes (non-blocking)
+          if (sessionId && lastUserMessage) {
+            persistMessages(sessionId, user.id, lastUserMessage.content, fullAssistantContent).catch(
+              (err) => console.error('Message persistence error:', err)
+            )
+          }
         } catch (error) {
           console.error('Stream error:', error)
           const sanitized = sanitizeError(error)
@@ -104,4 +114,39 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+async function persistMessages(
+  sessionId: string,
+  userId: string,
+  userContent: string,
+  assistantContent: string
+) {
+  // Verify session belongs to user
+  const session = await prisma.chatSession.findFirst({
+    where: { id: sessionId, userId },
+    include: { _count: { select: { messages: true } } },
+  })
+  if (!session) return
+
+  const isFirstMessage = session._count.messages === 0
+
+  await prisma.$transaction([
+    prisma.chatMessage.create({
+      data: { sessionId, role: 'user', content: userContent },
+    }),
+    prisma.chatMessage.create({
+      data: { sessionId, role: 'assistant', content: assistantContent },
+    }),
+    prisma.chatSession.update({
+      where: { id: sessionId },
+      data: {
+        updatedAt: new Date(),
+        // Auto-title from first message
+        ...(isFirstMessage && {
+          title: userContent.slice(0, 60).trim(),
+        }),
+      },
+    }),
+  ])
 }
