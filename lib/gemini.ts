@@ -68,9 +68,28 @@ export async function* streamChatResponse(
     history,
   })
 
-  const result = await chat.sendMessageStream(lastMessage)
+  // Retry on rate limit (429) with exponential backoff
+  let result
+  const maxRetries = 3
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      result = await chat.sendMessageStream(lastMessage)
+      break
+    } catch (err: any) {
+      const is429 =
+        err?.status === 429 ||
+        err?.message?.includes('429') ||
+        err?.message?.includes('RESOURCE_EXHAUSTED')
+      if (is429 && attempt < maxRetries) {
+        const waitMs = Math.pow(2, attempt) * 2000 // 2s, 4s, 8s
+        await new Promise(r => setTimeout(r, waitMs))
+      } else {
+        throw err
+      }
+    }
+  }
 
-  for await (const chunk of result.stream) {
+  for await (const chunk of result!.stream) {
     const text = chunk.text()
     if (text) {
       yield text
