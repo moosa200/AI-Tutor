@@ -242,7 +242,11 @@ function markNumericalAnswer(
     tolerance = Number(scheme.tolerance || 0)
   }
 
-  const isValueCorrect = Math.abs(studentValue - correctValue) <= tolerance
+  // Also accept if answer matches to 3 significant figures
+  const to3sf = (n: number) => parseFloat(n.toPrecision(3))
+  const isValueCorrect =
+    Math.abs(studentValue - correctValue) <= tolerance ||
+    to3sf(studentValue) === to3sf(correctValue)
 
   // Check unit
   const unitCorrect = scheme.unit
